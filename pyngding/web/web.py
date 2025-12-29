@@ -45,6 +45,72 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
     def serve_static(filename):
         return static_file(filename, root='pyngding/static')
     
+    # Health endpoint (no auth required - standard health check)
+    @app.route('/health')
+    def health():
+        """Health check endpoint with system stats."""
+        from pyngding.core.db import get_db
+        
+        health_data = {
+            'status': 'ok',
+            'timestamp': int(time.time()),
+            'version': '1.0.0',  # You may want to get this from config or package
+        }
+        
+        # Check database connectivity
+        db_healthy = False
+        try:
+            with get_db(db_path) as conn:
+                # Simple query to verify DB is accessible
+                conn.execute("SELECT 1").fetchone()
+                db_healthy = True
+        except Exception as e:
+            health_data['database_error'] = str(e)
+        
+        # Get scan stats
+        try:
+            stats = get_scan_stats(db_path)
+            health_data['stats'] = {
+                'hosts_up': stats.get('up_count', 0),
+                'hosts_down': stats.get('down_count', 0),
+                'total_hosts': stats.get('total_hosts', 0),
+                'missing_count': stats.get('missing_count', 0),
+                'last_scan_ts': stats.get('last_scan_ts'),
+            }
+            
+            # Get additional stats
+            with get_db(db_path) as conn:
+                total_runs = conn.execute("SELECT COUNT(*) FROM scan_runs").fetchone()[0] or 0
+                total_observations = conn.execute("SELECT COUNT(*) FROM observations").fetchone()[0] or 0
+                total_dns_events = conn.execute("SELECT COUNT(*) FROM dns_events").fetchone()[0] or 0
+                
+                health_data['stats']['total_scan_runs'] = total_runs
+                health_data['stats']['total_observations'] = total_observations
+                health_data['stats']['total_dns_events'] = total_dns_events
+        except Exception as e:
+            health_data['stats_error'] = str(e)
+        
+        # Check scheduler status if available
+        try:
+            if scheduler:
+                health_data['scheduler'] = {
+                    'running': getattr(scheduler, 'running', None),
+                    'adguard_running': getattr(scheduler, 'adguard_running', None),
+                    'ipv6_running': getattr(scheduler, 'ipv6_running', None),
+                }
+        except Exception:
+            pass  # Scheduler info is optional
+        
+        # Determine overall health status
+        if not db_healthy:
+            health_data['status'] = 'degraded'
+            response.status = 503  # Service Unavailable
+        else:
+            response.status = 200  # OK
+        
+        response.content_type = 'application/json'
+        return json.dumps(health_data, indent=2)
+    
     # Dashboard (auth required if enabled)
     @app.route('/')
     def dashboard():
