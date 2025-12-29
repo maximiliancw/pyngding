@@ -428,13 +428,12 @@ def insert_dns_event(db_path: str, ts: int, client_ip: str, domain: str,
 
 def get_adguard_state(db_path: str) -> Dict:
     """Get AdGuard ingestion state (last_seen_ts, last_offset)."""
-    with get_db(db_path) as conn:
-        last_seen_ts = get_ui_setting(db_path, 'adguard_last_seen_ts', None)
-        last_offset = int(get_ui_setting(db_path, 'adguard_last_offset', '0'))
-        return {
-            'last_seen_ts': int(last_seen_ts) if last_seen_ts else None,
-            'last_offset': last_offset
-        }
+    last_seen_ts = get_ui_setting(db_path, 'adguard_last_seen_ts', None)
+    last_offset = int(get_ui_setting(db_path, 'adguard_last_offset', '0'))
+    return {
+        'last_seen_ts': int(last_seen_ts) if last_seen_ts else None,
+        'last_offset': last_offset
+    }
 
 
 def set_adguard_state(db_path: str, last_seen_ts: Optional[int] = None,
