@@ -85,6 +85,16 @@ def serve(args):
     import signal
     
     try:
+        # Check if config file exists, create default if not
+        config_path = Path(args.config)
+        if not config_path.exists():
+            print(f"Config file not found at {config_path}")
+            print("Creating default config.ini in current directory...")
+            init_config(argparse.Namespace(path=str(config_path)))
+            print(f"Default config created at {config_path}")
+            print("Please edit config.ini to set your scan targets and other settings.")
+            print("For authentication, run: pyngding hash-password 'your-password'")
+        
         config = load_config(args.config)
         print(f"Starting pyngding server on {config.bind_host}:{config.bind_port}")
         print(f"Database: {config.db_path}")
