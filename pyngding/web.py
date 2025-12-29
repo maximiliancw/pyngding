@@ -53,6 +53,11 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         chart_window = int(get_ui_setting_helper(db_path, 'chart_window_runs', '200'))
         runs = get_recent_scan_runs(db_path, limit=chart_window)
         
+        # Get new/unsafe hosts for quick actions
+        from pyngding.db import get_hosts_with_profiles
+        all_hosts = get_hosts_with_profiles(db_path)
+        new_hosts = [h for h in all_hosts if h.get('profile_is_safe') != 1 and h['last_status'] == 'up']
+        
         # Prepare chart data (reverse for chronological order)
         chart_data = {
             'labels': [f"Run {r['id']}" for r in reversed(runs)],
@@ -60,7 +65,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         }
         chart_data_json = json.dumps(chart_data)
         
-        return template('dashboard.tpl', stats=stats, chart_data_json=chart_data_json, auth_enabled=config.auth_enabled)
+        return template('dashboard.tpl', stats=stats, chart_data_json=chart_data_json, 
+                       auth_enabled=config.auth_enabled, new_hosts=new_hosts[:10])
     
     # Hosts page (auth required if enabled)
     @app.route('/hosts')
@@ -119,6 +125,50 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         return template('partials/hosts-table.tpl', hosts=all_hosts)
     
     # Admin routes (only accessible when auth is enabled)
+    @app.route('/admin/hosts')
+    def admin_hosts():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import get_hosts_with_profiles
+        hosts = get_hosts_with_profiles(db_path)
+        return template('admin_hosts.tpl', hosts=hosts, auth_enabled=True)
+    
+    @app.route('/admin/hosts/<host_ip>/update', method='POST')
+    def admin_hosts_update(host_ip):
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import get_host, upsert_device_profile
+        import time
+        
+        host = get_host(db_path, host_ip)
+        if not host:
+            abort(404, 'Host not found')
+        
+        label = request.forms.get('label', '').strip() or None
+        is_safe = request.forms.get('is_safe', '').lower() == 'true'
+        tags = request.forms.get('tags', '').strip() or None
+        notes = request.forms.get('notes', '').strip() or None
+        
+        upsert_device_profile(
+            db_path,
+            mac=host.get('mac'),
+            ip=host['ip'],
+            label=label,
+            is_safe=is_safe,
+            tags=tags,
+            notes=notes,
+            now_ts=int(time.time())
+        )
+        
+        # Redirect back to admin hosts page
+        response.status = 303
+        response.headers['Location'] = '/admin/hosts'
+        return ''
+    
     @app.route('/admin/<path:path>')
     def admin_404(path):
         if not config.auth_enabled:

@@ -2,7 +2,7 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 
 @contextmanager
@@ -273,4 +273,79 @@ def get_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[str
         else:
             return None
         return dict(row) if row else None
+
+
+def upsert_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[str] = None,
+                         label: Optional[str] = None, is_safe: bool = False,
+                         tags: Optional[str] = None, notes: Optional[str] = None,
+                         now_ts: Optional[int] = None) -> int:
+    """Create or update a device profile. Returns profile ID."""
+    import time
+    if now_ts is None:
+        now_ts = int(time.time())
+    
+    with get_db(db_path) as conn:
+        # Check if exists
+        existing = None
+        if mac:
+            existing = conn.execute("SELECT id FROM device_profiles WHERE mac = ?", (mac,)).fetchone()
+        elif ip:
+            ip_key = f"ip:{ip}"
+            existing = conn.execute("SELECT id FROM device_profiles WHERE ip_key = ?", (ip_key,)).fetchone()
+        
+        if existing:
+            # Update
+            profile_id = existing[0]
+            conn.execute("""
+                UPDATE device_profiles SET
+                    label = COALESCE(?, label),
+                    is_safe = ?,
+                    tags = COALESCE(?, tags),
+                    notes = COALESCE(?, notes),
+                    updated_ts = ?
+                WHERE id = ?
+            """, (label, 1 if is_safe else 0, tags, notes, now_ts, profile_id))
+            return profile_id
+        else:
+            # Insert
+            ip_key = f"ip:{ip}" if ip and not mac else None
+            cursor = conn.execute("""
+                INSERT INTO device_profiles (mac, ip_key, label, is_safe, tags, notes, created_ts, updated_ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (mac, ip_key, label, 1 if is_safe else 0, tags, notes, now_ts, now_ts))
+            return cursor.lastrowid
+
+
+def get_all_device_profiles(db_path: str) -> List[Dict]:
+    """Get all device profiles."""
+    with get_db(db_path) as conn:
+        rows = conn.execute("SELECT * FROM device_profiles ORDER BY updated_ts DESC").fetchall()
+        return [dict(row) for row in rows]
+
+
+def delete_device_profile(db_path: str, profile_id: int) -> bool:
+    """Delete a device profile by ID."""
+    with get_db(db_path) as conn:
+        cursor = conn.execute("DELETE FROM device_profiles WHERE id = ?", (profile_id,))
+        return cursor.rowcount > 0
+
+
+def get_hosts_with_profiles(db_path: str) -> List[Dict]:
+    """Get all hosts with their device profile information joined."""
+    with get_db(db_path) as conn:
+        rows = conn.execute("""
+            SELECT h.*, 
+                   dp.id as profile_id,
+                   dp.label as profile_label,
+                   dp.is_safe as profile_is_safe,
+                   dp.tags as profile_tags,
+                   dp.notes as profile_notes
+            FROM hosts h
+            LEFT JOIN device_profiles dp ON (
+                (h.mac IS NOT NULL AND dp.mac = h.mac) OR
+                (h.mac IS NULL AND dp.ip_key = 'ip:' || h.ip)
+            )
+            ORDER BY h.ip
+        """).fetchall()
+        return [dict(row) for row in rows]
 

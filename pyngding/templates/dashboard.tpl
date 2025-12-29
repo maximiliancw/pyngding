@@ -14,6 +14,40 @@
     <div id="recent-changes" hx-get="/partials/recent-changes" hx-trigger="every 10s" hx-swap="outerHTML">
         % include('partials/recent-changes.tpl', runs=stats.get('recent_runs', []))
     </div>
+    
+    % if auth_enabled and new_hosts:
+    <div class="new-devices">
+        <h3>New/Unknown Devices</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>IP</th>
+                    <th>Hostname</th>
+                    <th>MAC</th>
+                    <th>Last Seen</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                % import time
+                % for host in new_hosts:
+                <tr>
+                    <td>{{host['ip']}}</td>
+                    <td>{{host['hostname'] or '-'}}</td>
+                    <td>{{host['mac'] or '-'}}</td>
+                    <td>{{!time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(host['last_seen_ts']))}}</td>
+                    <td>
+                        <form method="POST" action="/admin/hosts/{{host['ip']}}/update" style="display: inline;">
+                            <input type="hidden" name="is_safe" value="true">
+                            <button type="submit" class="btn-mark-safe">Mark Safe</button>
+                        </form>
+                    </td>
+                </tr>
+                % end
+            </tbody>
+        </table>
+    </div>
+    % end
 </div>
 
 <script>
