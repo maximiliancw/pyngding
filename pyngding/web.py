@@ -310,13 +310,126 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         check_auth()  # Require auth for admin routes
         abort(404, 'Admin route not yet implemented')
     
+    def check_api_key():
+        """Check if request has valid API key."""
+        if not config.auth_enabled:
+            return False
+        
+        # Check if API is enabled
+        api_enabled = get_ui_setting_helper(db_path, 'api_enabled', 'true').lower() == 'true'
+        if not api_enabled:
+            return False
+        
+        api_key = request.headers.get('X-API-Key')
+        if not api_key:
+            return False
+        
+        # Get key prefix (first 8 chars)
+        if len(api_key) < 8:
+            return False
+        
+        key_prefix = api_key[:8]
+        
+        # Look up key in database
+        from pyngding.db import get_api_key_by_prefix
+        from pyngding.api_keys import verify_api_key
+        import time
+        
+        key_record = get_api_key_by_prefix(db_path, key_prefix)
+        if not key_record:
+            return False
+        
+        # Verify the full key
+        if not verify_api_key(api_key, key_record['key_hash']):
+            return False
+        
+        # Update last used timestamp
+        from pyngding.db import update_api_key_last_used
+        update_api_key_last_used(db_path, key_record['id'], now_ts=int(time.time()))
+        
+        return True
+    
     # API routes (only accessible when auth is enabled AND api_enabled)
+    @app.route('/api/health')
+    def api_health():
+        if not check_api_key():
+            response.status = 401
+            return {'error': 'Invalid or missing API key'}
+        return {'status': 'ok'}
+    
+    @app.route('/api/ha/summary')
+    def api_ha_summary():
+        if not check_api_key():
+            response.status = 401
+            return {'error': 'Invalid or missing API key'}
+        
+        stats = get_scan_stats(db_path)
+        return {
+            'up_count': stats.get('up_count', 0),
+            'down_count': stats.get('down_count', 0),
+            'total_hosts': stats.get('total_hosts', 0),
+            'missing_count': stats.get('missing_count', 0),
+            'last_scan_ts': stats.get('last_scan_ts')
+        }
+    
+    @app.route('/api/ha/hosts')
+    def api_ha_hosts():
+        if not check_api_key():
+            response.status = 401
+            return {'error': 'Invalid or missing API key'}
+        
+        status_filter = request.query.get('status', '').strip().lower()
+        if status_filter not in ('up', 'down', ''):
+            status_filter = ''
+        
+        from pyngding.db import get_hosts_with_profiles
+        hosts = get_hosts_with_profiles(db_path)
+        
+        # Filter by status if requested
+        if status_filter:
+            hosts = [h for h in hosts if h['last_status'] == status_filter]
+        
+        # Format for HA
+        result = []
+        for host in hosts:
+            result.append({
+                'ip': host['ip'],
+                'hostname': host.get('hostname'),
+                'mac': host.get('mac'),
+                'vendor': host.get('vendor'),
+                'status': host['last_status'],
+                'rtt_ms': host.get('last_rtt_ms'),
+                'first_seen_ts': host['first_seen_ts'],
+                'last_seen_ts': host['last_seen_ts'],
+                'label': host.get('profile_label'),
+                'is_safe': bool(host.get('profile_is_safe')),
+                'tags': host.get('profile_tags', '').split(',') if host.get('profile_tags') else []
+            })
+        
+        return {'hosts': result}
+    
+    @app.route('/api/ha/alerts/recent')
+    def api_ha_alerts_recent():
+        if not check_api_key():
+            response.status = 401
+            return {'error': 'Invalid or missing API key'}
+        
+        limit = int(request.query.get('limit', '10'))
+        if limit > 100:
+            limit = 100
+        
+        # For now, return empty list - alerts will be implemented with notifications
+        # This is a placeholder for future enhancement
+        return {'alerts': []}
+    
     @app.route('/api/<path:path>')
     def api_404(path):
         if not config.auth_enabled:
             abort(404, 'Not found')
-        # API key check will be implemented in Step 11
-        abort(404, 'API route not yet implemented')
+        if not check_api_key():
+            response.status = 401
+            return {'error': 'Invalid or missing API key'}
+        abort(404, 'API route not found')
     
     # Metrics endpoint (only when auth enabled AND metrics_enabled)
     @app.route('/metrics')
