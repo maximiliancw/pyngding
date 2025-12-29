@@ -3,7 +3,7 @@
     <h2>Dashboard</h2>
     
     <div id="summary" hx-get="/partials/summary" hx-trigger="every 10s" hx-swap="outerHTML">
-        % include('partials/summary.tpl', stats=stats)
+        % include('partials/summary.tpl', stats=stats, ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
     </div>
     
     <div class="chart-container">

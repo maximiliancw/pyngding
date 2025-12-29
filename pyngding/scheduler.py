@@ -35,6 +35,10 @@ class ScanScheduler:
         # AdGuard scheduler
         self.adguard_running = False
         self.adguard_thread: Optional[threading.Thread] = None
+        
+        # IPv6 collection scheduler
+        self.ipv6_running = False
+        self.ipv6_thread: Optional[threading.Thread] = None
     
     def start(self):
         """Start the scan scheduler thread and AdGuard ingestion if enabled."""
@@ -50,6 +54,11 @@ class ScanScheduler:
         adguard_enabled = get_ui_setting(self.db_path, 'adguard_enabled', 'false').lower() == 'true'
         if adguard_enabled:
             self.start_adguard()
+        
+        # Start IPv6 collection if enabled
+        ipv6_enabled = get_ui_setting(self.db_path, 'ipv6_passive_enabled', 'true').lower() == 'true'
+        if ipv6_enabled:
+            self.start_ipv6_collection()
     
     def start_adguard(self):
         """Start AdGuard ingestion thread."""
@@ -59,6 +68,15 @@ class ScanScheduler:
         self.adguard_running = True
         self.adguard_thread = threading.Thread(target=self._adguard_loop, daemon=True)
         self.adguard_thread.start()
+    
+    def start_ipv6_collection(self):
+        """Start IPv6 neighbor collection thread."""
+        if self.ipv6_running:
+            return
+        
+        self.ipv6_running = True
+        self.ipv6_thread = threading.Thread(target=self._ipv6_loop, daemon=True)
+        self.ipv6_thread.start()
     
     def stop(self):
         """Stop the scan scheduler thread and AdGuard ingestion."""
@@ -70,6 +88,10 @@ class ScanScheduler:
         self.adguard_running = False
         if self.adguard_thread:
             self.adguard_thread.join(timeout=5.0)
+        
+        self.ipv6_running = False
+        if self.ipv6_thread:
+            self.ipv6_thread.join(timeout=5.0)
     
     def _run_loop(self):
         """Main scan loop."""
@@ -281,6 +303,23 @@ class ScanScheduler:
         
         if events:
             print(f"AdGuard: Ingested {len(events)} DNS events")
+    
+    def _ipv6_loop(self):
+        """IPv6 neighbor collection loop."""
+        while self.ipv6_running and not self.stop_event.is_set():
+            try:
+                from pyngding.ipv6 import collect_ipv6_neighbors
+                count = collect_ipv6_neighbors(self.db_path)
+                if count > 0:
+                    print(f"IPv6: Collected {count} neighbors")
+            except Exception as e:
+                print(f"Error in IPv6 collection: {e}", file=__import__('sys').stderr)
+            
+            # Run every 5 minutes
+            if not self.stop_event.wait(300):
+                continue
+            else:
+                break
 
 
 def get_scan_stats(db_path: str) -> dict:

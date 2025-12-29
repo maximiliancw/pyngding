@@ -58,6 +58,14 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         all_hosts = get_hosts_with_profiles(db_path)
         new_hosts = [h for h in all_hosts if h.get('profile_is_safe') != 1 and h['last_status'] == 'up']
         
+        # Get IPv6 neighbor count (last hour)
+        ipv6_enabled = get_ui_setting_helper(db_path, 'ipv6_passive_enabled', 'true').lower() == 'true'
+        ipv6_count = 0
+        if ipv6_enabled:
+            from pyngding.ipv6 import get_recent_ipv6_neighbors
+            ipv6_neighbors = get_recent_ipv6_neighbors(db_path, hours=1)
+            ipv6_count = len(ipv6_neighbors)
+        
         # Prepare chart data (reverse for chronological order)
         chart_data = {
             'labels': [f"Run {r['id']}" for r in reversed(runs)],
@@ -66,7 +74,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         chart_data_json = json.dumps(chart_data)
         
         return template('dashboard.tpl', stats=stats, chart_data_json=chart_data_json, 
-                       auth_enabled=config.auth_enabled, new_hosts=new_hosts[:10])
+                       auth_enabled=config.auth_enabled, new_hosts=new_hosts[:10],
+                       ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
     
     # Hosts page (auth required if enabled)
     @app.route('/hosts')
@@ -341,6 +350,25 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
                        state=state,
                        total_events=total_events,
                        recent_events=recent_events,
+                       auth_enabled=True)
+    
+    @app.route('/admin/ipv6')
+    def admin_ipv6():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.ipv6 import get_recent_ipv6_neighbors
+        from pyngding.settings import DEFAULTS
+        
+        ipv6_enabled = get_ui_setting_helper(db_path, 'ipv6_passive_enabled', DEFAULTS['ipv6_passive_enabled']).lower() == 'true'
+        
+        # Get recent neighbors (last 24 hours)
+        neighbors_24h = get_recent_ipv6_neighbors(db_path, hours=24)
+        
+        return template('admin_ipv6.tpl',
+                       ipv6_enabled=ipv6_enabled,
+                       neighbors=neighbors_24h,
                        auth_enabled=True)
     
     @app.route('/admin/<path:path>')

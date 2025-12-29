@@ -19,6 +19,8 @@
                 <a href="/admin/settings">Settings</a>
                 <a href="/admin/api-keys">API Keys</a>
                 <a href="/admin/hosts">Device Inventory</a>
+                <a href="/admin/adguard">AdGuard</a>
+                <a href="/admin/ipv6">IPv6</a>
                 % end
             </div>
         </div>

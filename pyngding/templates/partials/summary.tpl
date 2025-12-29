@@ -25,5 +25,11 @@
             % end
         </p>
     </div>
+    % if ipv6_enabled:
+    <div class="card">
+        <h3>IPv6 Neighbors (1h)</h3>
+        <p class="stat-value">{{ipv6_count}}</p>
+    </div>
+    % end
 </div>
 
