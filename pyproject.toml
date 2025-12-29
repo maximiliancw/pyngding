@@ -1,0 +1,7 @@
+[project]
+name = "pyngding"
+version = "0.1.0"
+description = "A lightweight LAN presence scanner and dashboard for network administrators"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
