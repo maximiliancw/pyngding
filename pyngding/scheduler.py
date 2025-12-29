@@ -39,6 +39,10 @@ class ScanScheduler:
         # IPv6 collection scheduler
         self.ipv6_running = False
         self.ipv6_thread: Optional[threading.Thread] = None
+        
+        # Retention tracking
+        self.last_retention_run = 0
+        self.retention_interval = 3600  # Run retention every hour
     
     def start(self):
         """Start the scan scheduler thread and AdGuard ingestion if enabled."""
@@ -110,6 +114,18 @@ class ScanScheduler:
     def _run_scan(self):
         """Run a single scan."""
         started_ts = int(time.time())
+        
+        # Run retention periodically
+        if (started_ts - self.last_retention_run) >= self.retention_interval:
+            try:
+                from pyngding.retention import run_retention, run_rollups
+                deleted = run_retention(self.db_path)
+                run_rollups(self.db_path)
+                if any(deleted.values()):
+                    print(f"Retention: Deleted {deleted}")
+                self.last_retention_run = started_ts
+            except Exception as e:
+                print(f"Error in retention: {e}", file=__import__('sys').stderr)
         
         # Parse targets
         targets = parse_targets(self.config.scan_targets, self.config.target_cap)
