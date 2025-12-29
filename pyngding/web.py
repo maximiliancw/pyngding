@@ -125,6 +125,59 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         return template('partials/hosts-table.tpl', hosts=all_hosts)
     
     # Admin routes (only accessible when auth is enabled)
+    @app.route('/admin/settings')
+    def admin_settings():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.settings import get_all_settings
+        settings = get_all_settings(db_path)
+        return template('admin_settings.tpl', settings=settings, auth_enabled=True)
+    
+    @app.route('/admin/settings', method='POST')
+    def admin_settings_update():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.settings import validate_setting, sanitize_setting, DEFAULTS
+        from pyngding.db import set_ui_setting
+        
+        errors = []
+        updated = []
+        
+        for key in DEFAULTS.keys():
+            if key in request.forms:
+                value = request.forms.get(key, '').strip()
+                # Use default if empty for optional fields
+                if not value and key not in ('webhook_url', 'ha_webhook_url', 'ntfy_topic', 
+                                            'adguard_base_url', 'adguard_querylog_path', 
+                                            'oui_file_path'):
+                    value = DEFAULTS[key]
+                
+                # Validate
+                is_valid, error_msg = validate_setting(key, value)
+                if not is_valid:
+                    errors.append(f"{key}: {error_msg}")
+                    continue
+                
+                # Sanitize and save
+                sanitized = sanitize_setting(key, value)
+                set_ui_setting(db_path, key, sanitized)
+                updated.append(key)
+        
+        if errors:
+            from pyngding.settings import get_all_settings
+            settings = get_all_settings(db_path)
+            return template('admin_settings.tpl', settings=settings, auth_enabled=True, 
+                          errors=errors, updated=updated)
+        
+        # Redirect to show success
+        response.status = 303
+        response.headers['Location'] = '/admin/settings?updated=' + ','.join(updated)
+        return ''
+    
     @app.route('/admin/hosts')
     def admin_hosts():
         if not config.auth_enabled:
