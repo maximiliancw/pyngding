@@ -445,6 +445,37 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         # Metrics will be implemented in Step 17
         return "# Metrics endpoint (to be implemented in Step 17)\n"
     
+    # Admin notification test
+    @app.route('/admin/notify/test', method='POST')
+    def admin_notify_test():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.notifications import send_notification
+        
+        channel = request.forms.get('channel', 'webhook')
+        test_ip = request.forms.get('ip', '192.168.1.100')
+        
+        # Send test notification
+        results = send_notification(
+            db_path,
+            event_type='test',
+            ip=test_ip,
+            hostname='Test Device',
+            label='Test Notification',
+            extra={'test': True}
+        )
+        
+        if channel in results:
+            success = results[channel]
+            response.status = 303
+            response.headers['Location'] = f'/admin/settings?notify_test={channel}&success={success}'
+        else:
+            response.status = 303
+            response.headers['Location'] = f'/admin/settings?notify_test={channel}&success=false'
+        return ''
+    
     return app
 
 

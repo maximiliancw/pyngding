@@ -19,6 +19,20 @@
     </div>
     % end
     
+    % if request.query.get('notify_test'):
+    % notify_channel = request.query.get('notify_test')
+    % notify_success = request.query.get('success') == 'true'
+    % if notify_success:
+    <div class="alert alert-success">
+        Test notification sent successfully via {{notify_channel}}!
+    </div>
+    % else:
+    <div class="alert alert-error">
+        Test notification failed via {{notify_channel}}. Check your settings.
+    </div>
+    % end
+    % end
+    
     <form method="POST" action="/admin/settings">
         <div class="settings-section">
             <h3>General/UI</h3>
@@ -143,6 +157,12 @@
                 <input type="text" name="webhook_secret" id="webhook_secret" 
                        value="{{settings.get('webhook_secret', '')}}">
             </div>
+            <div class="form-group">
+                <form method="POST" action="/admin/notify/test" style="display: inline;">
+                    <input type="hidden" name="channel" value="webhook">
+                    <button type="submit" class="btn-test">Test Webhook</button>
+                </form>
+            </div>
         </div>
         
         <div class="settings-section">
@@ -157,6 +177,12 @@
                 <label for="ha_webhook_url">HA Webhook URL:</label>
                 <input type="url" name="ha_webhook_url" id="ha_webhook_url" 
                        value="{{settings.get('ha_webhook_url', '')}}" placeholder="https://homeassistant.local:8123/api/webhook/...">
+            </div>
+            <div class="form-group">
+                <form method="POST" action="/admin/notify/test" style="display: inline;">
+                    <input type="hidden" name="channel" value="ha_webhook">
+                    <button type="submit" class="btn-test">Test HA Webhook</button>
+                </form>
             </div>
         </div>
         
@@ -177,6 +203,12 @@
                 <label for="ntfy_topic">Topic (required if enabled):</label>
                 <input type="text" name="ntfy_topic" id="ntfy_topic" 
                        value="{{settings.get('ntfy_topic', '')}}">
+            </div>
+            <div class="form-group">
+                <form method="POST" action="/admin/notify/test" style="display: inline;">
+                    <input type="hidden" name="channel" value="ntfy">
+                    <button type="submit" class="btn-test">Test ntfy</button>
+                </form>
             </div>
         </div>
         
@@ -243,6 +275,20 @@
 
 .alert ul {
     margin: 0.5rem 0 0 1.5rem;
+}
+
+.btn-test {
+    padding: 0.5rem 1rem;
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.btn-test:hover {
+    background-color: #138496;
 }
 </style>
 

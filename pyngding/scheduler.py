@@ -93,23 +93,37 @@ class ScanScheduler:
             down_count=down_count
         )
         
+        # Get existing hosts for comparison
+        existing_hosts = {h['ip']: h for h in get_all_hosts(self.db_path)}
+        
         # Write observations and update hosts
         for result in results:
+            ip = result['ip']
+            existing = existing_hosts.get(ip)
+            
             # Insert observation
             insert_observation(
                 self.db_path,
                 run_id=run_id,
-                ip=result['ip'],
+                ip=ip,
                 status=result['status'],
                 rtt_ms=result.get('rtt_ms'),
                 mac=result.get('mac'),
                 hostname=result.get('hostname')
             )
             
+            # Check for changes
+            is_new = existing is None
+            is_gone = existing and existing['last_status'] == 'up' and result['status'] == 'down'
+            ip_mac_change = False
+            if existing and result.get('mac') and existing.get('mac'):
+                if result['mac'] != existing['mac']:
+                    ip_mac_change = True
+            
             # Update host record
             upsert_host(
                 self.db_path,
-                ip=result['ip'],
+                ip=ip,
                 mac=result.get('mac'),
                 hostname=result.get('hostname'),
                 vendor=None,  # Will be filled by OUI lookup later
@@ -117,6 +131,35 @@ class ScanScheduler:
                 rtt_ms=result.get('rtt_ms'),
                 now_ts=finished_ts
             )
+            
+            # Send notifications
+            from pyngding.db import get_device_profile
+            from pyngding.notifications import send_notification
+            
+            profile = get_device_profile(self.db_path, mac=result.get('mac'), ip=ip)
+            label = profile['label'] if profile else None
+            is_safe = bool(profile['is_safe']) if profile else False
+            tags = profile['tags'] if profile else None
+            
+            if is_new and result['status'] == 'up':
+                send_notification(
+                    self.db_path, 'new_host', ip,
+                    mac=result.get('mac'), hostname=result.get('hostname'),
+                    vendor=None, label=label, is_safe=is_safe, tags=tags
+                )
+            elif is_gone:
+                send_notification(
+                    self.db_path, 'host_gone', ip,
+                    mac=result.get('mac'), hostname=result.get('hostname'),
+                    vendor=None, label=label, is_safe=is_safe, tags=tags
+                )
+            elif ip_mac_change:
+                send_notification(
+                    self.db_path, 'ip_mac_change', ip,
+                    mac=result.get('mac'), hostname=result.get('hostname'),
+                    vendor=None, label=label, is_safe=is_safe, tags=tags,
+                    extra={'old_mac': existing.get('mac'), 'new_mac': result.get('mac')}
+                )
         
         print(f"Scan completed: {up_count} up, {down_count} down, {len(targets)} targets")
 
