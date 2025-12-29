@@ -1,17 +1,17 @@
 % rebase('layout.tpl', title='IPv6 Neighbors', auth_enabled=auth_enabled)
-<div class="admin-ipv6-page">
-    <h2>IPv6 Neighbors</h2>
+<article>
+    <header>
+        <h1>IPv6 Neighbors</h1>
+    </header>
     
     % if not ipv6_enabled:
-    <div class="alert alert-error">
+    <article style="background-color: var(--pico-del-color); color: var(--pico-background-color);">
         IPv6 passive neighbor collection is disabled. Enable it in Settings.
-    </div>
+    </article>
     % else:
-    <div class="ipv6-info">
-        <p>Showing IPv6 neighbors seen in the last 24 hours.</p>
-    </div>
+    <p>Showing IPv6 neighbors seen in the last 24 hours.</p>
     
-    <table class="hosts-table">
+    <table>
         <thead>
             <tr>
                 <th>IPv6 Address</th>
@@ -38,20 +38,12 @@
             % end
             % if not neighbors:
             <tr>
-                <td colspan="4" class="no-results">No IPv6 neighbors found in the last 24 hours</td>
+                <td colspan="4" style="text-align: center; padding: 2rem; color: var(--pico-muted-color);">No IPv6 neighbors found in the last 24 hours</td>
             </tr>
             % end
         </tbody>
     </table>
     % end
-</div>
+</article>
 
-<style>
-code {
-    font-family: monospace;
-    background-color: #f0f0f0;
-    padding: 0.2rem 0.4rem;
-    border-radius: 3px;
-}
-</style>
 

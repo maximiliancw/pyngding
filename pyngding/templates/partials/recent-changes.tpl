@@ -1,5 +1,7 @@
-<div class="recent-changes">
-    <h3>Recent Scan Runs</h3>
+<article>
+    <header>
+        <h2>Recent Scan Runs</h2>
+    </header>
     <table>
         <thead>
             <tr>
@@ -22,10 +24,10 @@
             % end
             % else:
             <tr>
-                <td colspan="4" class="no-results">No scan runs yet</td>
+                <td colspan="4" style="text-align: center; padding: 2rem; color: var(--pico-muted-color);">No scan runs yet</td>
             </tr>
             % end
         </tbody>
     </table>
-</div>
+</article>
 

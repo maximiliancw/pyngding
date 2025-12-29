@@ -1,35 +1,47 @@
-<div class="summary-cards">
-    <div class="card">
-        <h3>Hosts Up</h3>
-        <p class="stat-value">{{stats.get('up_count', 0)}}</p>
-    </div>
-    <div class="card">
-        <h3>Hosts Down</h3>
-        <p class="stat-value">{{stats.get('down_count', 0)}}</p>
-    </div>
-    <div class="card">
-        <h3>Total Hosts</h3>
-        <p class="stat-value">{{stats.get('total_hosts', 0)}}</p>
-    </div>
-    <div class="card">
-        <h3>Missing</h3>
-        <p class="stat-value">{{stats.get('missing_count', 0)}}</p>
-    </div>
-    <div class="card">
-        <h3>Last Scan</h3>
-        <p class="stat-value">
+<div class="grid">
+    <article>
+        <header>
+            <h3>Hosts Up</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">{{stats.get('up_count', 0)}}</p>
+    </article>
+    <article>
+        <header>
+            <h3>Hosts Down</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">{{stats.get('down_count', 0)}}</p>
+    </article>
+    <article>
+        <header>
+            <h3>Total Hosts</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">{{stats.get('total_hosts', 0)}}</p>
+    </article>
+    <article>
+        <header>
+            <h3>Missing</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">{{stats.get('missing_count', 0)}}</p>
+    </article>
+    <article>
+        <header>
+            <h3>Last Scan</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">
             % if stats.get('last_scan_ts'):
                 {{!time.strftime('%H:%M:%S', time.localtime(stats['last_scan_ts']))}}
             % else:
                 Never
             % end
         </p>
-    </div>
+    </article>
     % if ipv6_enabled:
-    <div class="card">
-        <h3>IPv6 Neighbors (1h)</h3>
-        <p class="stat-value">{{ipv6_count}}</p>
-    </div>
+    <article>
+        <header>
+            <h3>IPv6 Neighbors (1h)</h3>
+        </header>
+        <p style="font-size: 2rem; font-weight: bold; margin: 0;">{{ipv6_count}}</p>
+    </article>
     % end
 </div>
 

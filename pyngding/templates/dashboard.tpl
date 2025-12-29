@@ -1,23 +1,29 @@
 % rebase('layout.tpl', title='Dashboard', auth_enabled=auth_enabled)
-<div class="dashboard">
-    <h2>Dashboard</h2>
+<article>
+    <header>
+        <h1>Dashboard</h1>
+    </header>
     
     <div id="summary" hx-get="/partials/summary" hx-trigger="every 10s" hx-swap="outerHTML">
         % include('partials/summary.tpl', stats=stats, ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
     </div>
     
-    <div class="chart-container">
-        <h3>Hosts Up Over Time</h3>
+    <article>
+        <header>
+            <h2>Hosts Up Over Time</h2>
+        </header>
         <canvas id="chart"></canvas>
-    </div>
+    </article>
     
     <div id="recent-changes" hx-get="/partials/recent-changes" hx-trigger="every 10s" hx-swap="outerHTML">
         % include('partials/recent-changes.tpl', runs=stats.get('recent_runs', []))
     </div>
     
     % if auth_enabled and new_hosts:
-    <div class="new-devices">
-        <h3>New/Unknown Devices</h3>
+    <article>
+        <header>
+            <h2>New/Unknown Devices</h2>
+        </header>
         <table>
             <thead>
                 <tr>
@@ -39,16 +45,16 @@
                     <td>
                         <form method="POST" action="/admin/hosts/{{host['ip']}}/update" style="display: inline;">
                             <input type="hidden" name="is_safe" value="true">
-                            <button type="submit" class="btn-mark-safe">Mark Safe</button>
+                            <button type="submit">Mark Safe</button>
                         </form>
                     </td>
                 </tr>
                 % end
             </tbody>
         </table>
-    </div>
+    </article>
     % end
-</div>
+</article>
 
 <script>
     const chartData = {{!chart_data_json}};

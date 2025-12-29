@@ -1,4 +1,4 @@
-<table class="hosts-table">
+<table>
     <thead>
         <tr>
             <th>IP</th>
@@ -13,15 +13,21 @@
     <tbody>
         % import time
         % for host in hosts:
-        <tr class="status-{{host['last_status']}}">
+        <tr>
             <td>
                 {{host['ip']}}
-                <button onclick="toggleDNS('{{host['ip']}}')" class="btn-dns-toggle" title="Show DNS activity">DNS</button>
+                <button onclick="toggleDNS('{{host['ip']}}')" class="secondary" style="margin-left: 0.5rem; padding: 0.2rem 0.5rem; font-size: 0.8rem;" title="Show DNS activity">DNS</button>
             </td>
             <td>{{host['hostname'] or '-'}}</td>
             <td>{{host['mac'] or '-'}}</td>
             <td>{{host['vendor'] or '-'}}</td>
-            <td><span class="status-badge status-{{host['last_status']}}">{{host['last_status']}}</span></td>
+            <td>
+                % if host['last_status'] == 'up':
+                <mark style="background-color: var(--pico-ins-color); color: var(--pico-background-color); padding: 0.25rem 0.5rem; border-radius: 0.25rem;">{{host['last_status']}}</mark>
+                % else:
+                <mark style="background-color: var(--pico-del-color); color: var(--pico-background-color); padding: 0.25rem 0.5rem; border-radius: 0.25rem;">{{host['last_status']}}</mark>
+                % end
+            </td>
             <td>{{host['last_rtt_ms'] or '-'}}</td>
             <td>{{!time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(host['last_seen_ts']))}}</td>
         </tr>
@@ -35,7 +41,7 @@
         % end
         % if not hosts:
         <tr>
-            <td colspan="7" class="no-results">No hosts found</td>
+            <td colspan="7" style="text-align: center; padding: 2rem; color: var(--pico-muted-color);">No hosts found</td>
         </tr>
         % end
     </tbody>
@@ -57,21 +63,4 @@ function toggleDNS(ip) {
     }
 }
 </script>
-
-<style>
-.btn-dns-toggle {
-    padding: 0.2rem 0.5rem;
-    font-size: 0.8rem;
-    background-color: #17a2b8;
-    color: white;
-    border: none;
-    border-radius: 3px;
-    cursor: pointer;
-    margin-left: 0.5rem;
-}
-
-.btn-dns-toggle:hover {
-    background-color: #138496;
-}
-</style>
 
