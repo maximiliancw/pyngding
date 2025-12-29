@@ -1,3 +1,13 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+exclude = ["docker*"]
+
+[tool.setuptools.package-data]
+pyngding = ["templates/**/*", "static/**/*"]
+
 [project]
 name = "pyngding"
 version = "0.1.0"
