@@ -349,3 +349,67 @@ def get_hosts_with_profiles(db_path: str) -> List[Dict]:
         """).fetchall()
         return [dict(row) for row in rows]
 
+
+# API key functions
+def create_api_key(db_path: str, name: str, key_prefix: str, key_hash: str, now_ts: Optional[int] = None) -> int:
+    """Create a new API key record. Returns key ID."""
+    import time
+    if now_ts is None:
+        now_ts = int(time.time())
+    
+    with get_db(db_path) as conn:
+        cursor = conn.execute("""
+            INSERT INTO api_keys (name, key_prefix, key_hash, created_ts, is_enabled)
+            VALUES (?, ?, ?, ?, 1)
+        """, (name, key_prefix, key_hash, now_ts))
+        return cursor.lastrowid
+
+
+def get_all_api_keys(db_path: str) -> List[Dict]:
+    """Get all API keys (without hashes, for display)."""
+    with get_db(db_path) as conn:
+        rows = conn.execute("""
+            SELECT id, name, key_prefix, created_ts, last_used_ts, is_enabled
+            FROM api_keys
+            ORDER BY created_ts DESC
+        """).fetchall()
+        return [dict(row) for row in rows]
+
+
+def get_api_key_by_prefix(db_path: str, key_prefix: str) -> Optional[Dict]:
+    """Get API key record by prefix (for verification)."""
+    with get_db(db_path) as conn:
+        row = conn.execute("""
+            SELECT * FROM api_keys
+            WHERE key_prefix = ? AND is_enabled = 1
+        """, (key_prefix,)).fetchone()
+        return dict(row) if row else None
+
+
+def update_api_key_last_used(db_path: str, key_id: int, now_ts: Optional[int] = None) -> None:
+    """Update last_used_ts for an API key."""
+    import time
+    if now_ts is None:
+        now_ts = int(time.time())
+    
+    with get_db(db_path) as conn:
+        conn.execute("""
+            UPDATE api_keys SET last_used_ts = ? WHERE id = ?
+        """, (now_ts, key_id))
+
+
+def toggle_api_key(db_path: str, key_id: int, is_enabled: bool) -> bool:
+    """Enable or disable an API key. Returns True if updated."""
+    with get_db(db_path) as conn:
+        cursor = conn.execute("""
+            UPDATE api_keys SET is_enabled = ? WHERE id = ?
+        """, (1 if is_enabled else 0, key_id))
+        return cursor.rowcount > 0
+
+
+def delete_api_key(db_path: str, key_id: int) -> bool:
+    """Delete an API key. Returns True if deleted."""
+    with get_db(db_path) as conn:
+        cursor = conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
+        return cursor.rowcount > 0
+
