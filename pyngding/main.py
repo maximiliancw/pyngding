@@ -51,11 +51,19 @@ realm = pyngding
 
 def serve(args):
     """Start the pyngding server."""
-    # This will be implemented in later steps
-    print("Starting pyngding server...")
-    print(f"Config: {args.config}")
-    print("(Not yet implemented - will be added in Step 2)")
-    return 0
+    from pyngding.config import load_config
+    
+    try:
+        config = load_config(args.config)
+        print(f"Starting pyngding server on {config.bind_host}:{config.bind_port}")
+        print(f"Database: {config.db_path}")
+        print(f"Scan targets: {config.scan_targets}")
+        print(f"Auth enabled: {config.auth_enabled}")
+        print("(Server startup will be implemented in Step 3+)")
+        return 0
+    except Exception as e:
+        print(f"Error loading config: {e}", file=sys.stderr)
+        return 1
 
 
 def cli():
