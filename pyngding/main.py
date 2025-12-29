@@ -90,7 +90,9 @@ def serve(args):
         if not config_path.exists():
             print(f"Config file not found at {config_path}")
             print("Creating default config.ini in current directory...")
-            init_config(argparse.Namespace(path=str(config_path)))
+            # Create a simple namespace for init_config
+            init_args = type('Args', (), {'path': str(config_path)})()
+            init_config(init_args)
             print(f"Default config created at {config_path}")
             print("Please edit config.ini to set your scan targets and other settings.")
             print("For authentication, run: pyngding hash-password 'your-password'")
