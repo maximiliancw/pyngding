@@ -9,7 +9,7 @@ def detect_dns_burst(db_path: str, client_ip: str, window_minutes: int = 5,
     
     Returns True if queries in last window_minutes exceed threshold.
     """
-    from pyngding.db import get_db
+    from pyngding.core.db import get_db
     
     window_start = int(time.time()) - (window_minutes * 60)
     
