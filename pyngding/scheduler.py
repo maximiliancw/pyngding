@@ -149,13 +149,19 @@ class ScanScheduler:
                 if result['mac'] != existing['mac']:
                     ip_mac_change = True
             
+            # Get vendor from OUI lookup
+            vendor = None
+            if result.get('mac'):
+                from pyngding.vendor import get_vendor
+                vendor = get_vendor(result['mac'], self.db_path)
+            
             # Update host record
             upsert_host(
                 self.db_path,
                 ip=ip,
                 mac=result.get('mac'),
                 hostname=result.get('hostname'),
-                vendor=None,  # Will be filled by OUI lookup later
+                vendor=vendor,
                 status=result['status'],
                 rtt_ms=result.get('rtt_ms'),
                 now_ts=finished_ts

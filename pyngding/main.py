@@ -49,6 +49,33 @@ realm = pyngding
     return 0
 
 
+def oui_import(args):
+    """Import OUI vendor file."""
+    from pyngding.vendor import OUILookup
+    
+    file_path = Path(args.path)
+    if not file_path.exists():
+        print(f"Error: {file_path} does not exist", file=sys.stderr)
+        return 1
+    
+    lookup = OUILookup()
+    count = lookup.load(str(file_path))
+    
+    if count > 0:
+        print(f"Successfully loaded {count} OUI entries from {file_path}")
+        print("OUI lookup is now available. Enable it in Settings (oui_lookup_enabled = true)")
+        print(f"Set oui_file_path = {file_path} in Settings")
+    else:
+        print(f"Warning: No OUI entries loaded from {file_path}", file=sys.stderr)
+        print("Check file format. Supported formats:")
+        print("  - 'AA-BB-CC   (hex)  Vendor Name'")
+        print("  - 'AABBCC,Vendor Name' (CSV)")
+        print("  - 'AABBCC Vendor Name'")
+        return 1
+    
+    return 0
+
+
 def serve(args):
     """Start the pyngding server."""
     from pyngding.config import load_config
@@ -116,6 +143,15 @@ def cli():
     init_parser.add_argument('--path', type=str, default='config.ini',
                             help='Path where to create config.ini (default: config.ini)')
     init_parser.set_defaults(func=init_config)
+    
+    # oui subcommands
+    oui_parser = subparsers.add_parser('oui', help='OUI vendor lookup commands')
+    oui_subparsers = oui_parser.add_subparsers(dest='oui_command', help='OUI commands')
+    
+    oui_import_parser = oui_subparsers.add_parser('import', help='Import OUI vendor file')
+    oui_import_parser.add_argument('--path', type=str, required=True,
+                                   help='Path to OUI file (txt or csv)')
+    oui_import_parser.set_defaults(func=oui_import)
     
     args = parser.parse_args()
     
