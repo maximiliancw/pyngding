@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  pyngding:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: pyngding
+    network_mode: host
+    cap_add:
+      - NET_RAW
+    volumes:
+      - ./data:/data
+    environment:
+      - PYNGDING_CONFIG=/data/config.ini
+      - PYNGDING_DB_PATH=/data/pyngding.sqlite
+    restart: unless-stopped
+    # For ARMv6 devices (e.g., Raspberry Pi 1B), uncomment and use:
+    # platform: linux/arm/v6
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
+    #   args:
+    #     BASE_IMAGE: arm32v6/python:3.11-slim
+
