@@ -52,6 +52,7 @@ realm = pyngding
 def serve(args):
     """Start the pyngding server."""
     from pyngding.config import load_config
+    from pyngding.db import init_db
     
     try:
         config = load_config(args.config)
@@ -59,10 +60,17 @@ def serve(args):
         print(f"Database: {config.db_path}")
         print(f"Scan targets: {config.scan_targets}")
         print(f"Auth enabled: {config.auth_enabled}")
-        print("(Server startup will be implemented in Step 3+)")
+        
+        # Initialize database
+        init_db(config.db_path)
+        print("Database initialized")
+        
+        print("(Web server will be implemented in Step 6+)")
         return 0
     except Exception as e:
-        print(f"Error loading config: {e}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         return 1
 
 
