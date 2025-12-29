@@ -510,8 +510,54 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         if not metrics_enabled:
             abort(404, 'Metrics disabled')
         
-        # Metrics will be implemented in Step 17
-        return "# Metrics endpoint (to be implemented in Step 17)\n"
+        from pyngding.db import get_db
+        from pyngding.scheduler import get_scan_stats
+        
+        stats = get_scan_stats(db_path)
+        
+        # Get scan run stats
+        with get_db(db_path) as conn:
+            total_runs = conn.execute("SELECT COUNT(*) FROM scan_runs").fetchone()[0] or 0
+            total_observations = conn.execute("SELECT COUNT(*) FROM observations").fetchone()[0] or 0
+            total_dns_events = conn.execute("SELECT COUNT(*) FROM dns_events").fetchone()[0] or 0
+        
+        # Prometheus text format
+        response.content_type = 'text/plain; version=0.0.4'
+        
+        metrics_text = f"""# HELP pyngding_hosts_up Number of hosts currently up
+# TYPE pyngding_hosts_up gauge
+pyngding_hosts_up {stats.get('up_count', 0)}
+
+# HELP pyngding_hosts_down Number of hosts currently down
+# TYPE pyngding_hosts_down gauge
+pyngding_hosts_down {stats.get('down_count', 0)}
+
+# HELP pyngding_hosts_total Total number of hosts
+# TYPE pyngding_hosts_total gauge
+pyngding_hosts_total {stats.get('total_hosts', 0)}
+
+# HELP pyngding_hosts_missing Number of missing hosts
+# TYPE pyngding_hosts_missing gauge
+pyngding_hosts_missing {stats.get('missing_count', 0)}
+
+# HELP pyngding_scan_runs_total Total number of scan runs
+# TYPE pyngding_scan_runs_total counter
+pyngding_scan_runs_total {total_runs}
+
+# HELP pyngding_observations_total Total number of observations
+# TYPE pyngding_observations_total counter
+pyngding_observations_total {total_observations}
+
+# HELP pyngding_dns_events_total Total number of DNS events
+# TYPE pyngding_dns_events_total counter
+pyngding_dns_events_total {total_dns_events}
+
+# HELP pyngding_last_scan_timestamp Timestamp of last scan
+# TYPE pyngding_last_scan_timestamp gauge
+pyngding_last_scan_timestamp {stats.get('last_scan_ts', 0)}
+"""
+        
+        return metrics_text
     
     # Admin notification test
     @app.route('/admin/notify/test', method='POST')

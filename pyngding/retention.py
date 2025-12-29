@@ -1,6 +1,6 @@
 """Data retention and rollup management."""
 import time
-from typing import Dict
+from typing import Dict, Optional
 
 
 def run_retention(db_path: str) -> Dict[str, int]:
