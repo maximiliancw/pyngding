@@ -190,7 +190,7 @@ class ScanScheduler:
             # Get vendor from OUI lookup
             vendor = None
             if result.get('mac'):
-                from pyngding.vendor import get_vendor
+                from pyngding.data.vendor import get_vendor
                 vendor = get_vendor(result['mac'], self.db_path)
             
             # Update host record

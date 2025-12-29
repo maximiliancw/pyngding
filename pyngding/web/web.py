@@ -62,7 +62,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         ipv6_enabled = get_ui_setting_helper(db_path, 'ipv6_passive_enabled', 'true').lower() == 'true'
         ipv6_count = 0
         if ipv6_enabled:
-            from pyngding.ipv6 import get_recent_ipv6_neighbors
+            from pyngding.scanning.ipv6 import get_recent_ipv6_neighbors
             ipv6_neighbors = get_recent_ipv6_neighbors(db_path, hours=1)
             ipv6_count = len(ipv6_neighbors)
         
