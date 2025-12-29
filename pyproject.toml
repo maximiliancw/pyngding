@@ -9,4 +9,4 @@ dependencies = [
 ]
 
 [project.scripts]
-pyngding = "pyngding.main:cli"
+pyngding = "pyngding.core.main:cli"

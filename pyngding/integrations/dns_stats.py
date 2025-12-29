@@ -26,7 +26,7 @@ def detect_dns_burst(db_path: str, client_ip: str, window_minutes: int = 5,
 def get_dns_burst_hosts(db_path: str, window_minutes: int = 5,
                         threshold: int = 100) -> List[Dict]:
     """Get list of hosts with DNS bursts."""
-    from pyngding.db import get_db, get_device_profile
+    from pyngding.core.db import get_db, get_device_profile
     
     window_start = int(time.time()) - (window_minutes * 60)
     

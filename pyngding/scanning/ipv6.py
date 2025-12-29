@@ -55,7 +55,7 @@ def collect_ipv6_neighbors(db_path: str) -> int:
     
     Returns number of neighbors collected.
     """
-    from pyngding.db import get_db
+    from pyngding.core.db import get_db
     
     neighbors = get_ipv6_neighbors()
     if not neighbors:
@@ -77,7 +77,7 @@ def collect_ipv6_neighbors(db_path: str) -> int:
 
 def get_recent_ipv6_neighbors(db_path: str, hours: int = 1) -> List[Dict]:
     """Get IPv6 neighbors seen in the last N hours."""
-    from pyngding.db import get_db
+    from pyngding.core.db import get_db
     
     cutoff_ts = int(time.time()) - (hours * 3600)
     

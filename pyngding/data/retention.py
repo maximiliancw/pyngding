@@ -8,8 +8,8 @@ def run_retention(db_path: str) -> Dict[str, int]:
     
     Returns dict with counts of deleted records.
     """
-    from pyngding.db import get_ui_setting, get_db
-    from pyngding.settings import DEFAULTS
+    from pyngding.core.db import get_ui_setting, get_db
+    from pyngding.web.settings import DEFAULTS
     
     now_ts = int(time.time())
     deleted = {
@@ -59,7 +59,7 @@ def update_daily_stats(db_path: str, day_yyyymmdd: Optional[int] = None) -> None
     If day_yyyymmdd is None, uses today.
     """
     import time
-    from pyngding.db import get_db
+    from pyngding.core.db import get_db
     
     if day_yyyymmdd is None:
         day_yyyymmdd = int(time.strftime('%Y%m%d', time.localtime()))

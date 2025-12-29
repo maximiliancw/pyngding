@@ -81,7 +81,7 @@ def require_auth(func):
     """Decorator to require BasicAuth for a route."""
     def wrapper(*args, **kwargs):
         from bottle import request, response
-        from pyngding.config import Config
+        from pyngding.core.config import Config
         
         # Get config from app context (we'll pass it via closure)
         # For now, we'll check it in the web.py route handlers

@@ -131,8 +131,8 @@ def send_notification(db_path: str, event_type: str, ip: str, mac: Optional[str]
     
     Returns dict with channel -> success status.
     """
-    from pyngding.db import get_ui_setting
-    from pyngding.settings import DEFAULTS
+    from pyngding.core.db import get_ui_setting
+    from pyngding.web.settings import DEFAULTS
     
     results = {}
     queue = NotificationQueue()

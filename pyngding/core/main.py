@@ -51,7 +51,7 @@ realm = pyngding
 
 def oui_import(args):
     """Import OUI vendor file."""
-    from pyngding.vendor import OUILookup
+    from pyngding.data.vendor import OUILookup
     
     file_path = Path(args.path)
     if not file_path.exists():
@@ -78,10 +78,10 @@ def oui_import(args):
 
 def serve(args):
     """Start the pyngding server."""
-    from pyngding.config import load_config
-    from pyngding.db import init_db
-    from pyngding.scheduler import ScanScheduler
-    from pyngding.web import create_app
+    from pyngding.core.config import load_config
+    from pyngding.core.db import init_db
+    from pyngding.scanning.scheduler import ScanScheduler
+    from pyngding.web.web import create_app
     import signal
     
     try:

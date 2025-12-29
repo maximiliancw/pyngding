@@ -4,10 +4,10 @@ import json
 import time
 from bottle import Bottle, request, response, template, static_file, abort
 
-from pyngding.auth import check_basic_auth
-from pyngding.config import Config
-from pyngding.db import get_all_hosts, get_recent_scan_runs, get_scan_stats, get_db, get_ui_setting as db_get_ui_setting
-from pyngding.scheduler import ScanScheduler
+from pyngding.web.auth import check_basic_auth
+from pyngding.core.config import Config
+from pyngding.core.db import get_all_hosts, get_recent_scan_runs, get_scan_stats, get_db, get_ui_setting as db_get_ui_setting
+from pyngding.scanning.scheduler import ScanScheduler
 
 
 def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle:
@@ -54,7 +54,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         runs = get_recent_scan_runs(db_path, limit=chart_window)
         
         # Get new/unsafe hosts for quick actions
-        from pyngding.db import get_hosts_with_profiles
+        from pyngding.core.db import get_hosts_with_profiles
         all_hosts = get_hosts_with_profiles(db_path)
         new_hosts = [h for h in all_hosts if h.get('profile_is_safe') != 1 and h['last_status'] == 'up']
         
@@ -137,8 +137,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
     def partials_dns_host(ip):
         require_auth_if_enabled()
         
-        from pyngding.db import get_host_dns_summary
-        from pyngding.settings import DEFAULTS
+        from pyngding.core.db import get_host_dns_summary
+        from pyngding.web.settings import DEFAULTS
         
         adguard_enabled = get_ui_setting_helper(db_path, 'adguard_enabled', DEFAULTS['adguard_enabled']).lower() == 'true'
         if not adguard_enabled:
@@ -154,7 +154,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.settings import get_all_settings
+        from pyngding.web.settings import get_all_settings
         settings = get_all_settings(db_path)
         return template('admin_settings.tpl', settings=settings, auth_enabled=True)
     
@@ -164,8 +164,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.settings import validate_setting, sanitize_setting, DEFAULTS
-        from pyngding.db import set_ui_setting
+        from pyngding.web.settings import validate_setting, sanitize_setting, DEFAULTS
+        from pyngding.core.db import set_ui_setting
         
         errors = []
         updated = []
@@ -191,7 +191,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
                 updated.append(key)
         
         if errors:
-            from pyngding.settings import get_all_settings
+            from pyngding.web.settings import get_all_settings
             settings = get_all_settings(db_path)
             return template('admin_settings.tpl', settings=settings, auth_enabled=True, 
                           errors=errors, updated=updated)
@@ -207,7 +207,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import get_hosts_with_profiles
+        from pyngding.core.db import get_hosts_with_profiles
         hosts = get_hosts_with_profiles(db_path)
         return template('admin_hosts.tpl', hosts=hosts, auth_enabled=True)
     
@@ -217,7 +217,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import get_host, upsert_device_profile
+        from pyngding.core.db import get_host, upsert_device_profile
         import time
         
         host = get_host(db_path, host_ip)
@@ -251,7 +251,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import get_all_api_keys
+        from pyngding.core.db import get_all_api_keys
         api_keys = get_all_api_keys(db_path)
         return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, new_key=None)
     
@@ -261,8 +261,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.api_keys import generate_api_key, hash_api_key
-        from pyngding.db import create_api_key, get_all_api_keys
+        from pyngding.web.api_keys import generate_api_key, hash_api_key
+        from pyngding.core.db import create_api_key, get_all_api_keys
         import time
         
         name = request.forms.get('name', '').strip()
@@ -289,7 +289,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import get_all_api_keys, toggle_api_key
+        from pyngding.core.db import get_all_api_keys, toggle_api_key
         
         try:
             key_id_int = int(key_id)
@@ -314,7 +314,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import delete_api_key
+        from pyngding.core.db import delete_api_key
         
         try:
             key_id_int = int(key_id)
@@ -332,8 +332,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.db import get_adguard_state, get_db
-        from pyngding.settings import DEFAULTS
+        from pyngding.core.db import get_adguard_state, get_db
+        from pyngding.web.settings import DEFAULTS
         
         adguard_enabled = get_ui_setting_helper(db_path, 'adguard_enabled', DEFAULTS['adguard_enabled']).lower() == 'true'
         state = get_adguard_state(db_path)
@@ -358,8 +358,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.ipv6 import get_recent_ipv6_neighbors
-        from pyngding.settings import DEFAULTS
+        from pyngding.scanning.ipv6 import get_recent_ipv6_neighbors
+        from pyngding.web.settings import DEFAULTS
         
         ipv6_enabled = get_ui_setting_helper(db_path, 'ipv6_passive_enabled', DEFAULTS['ipv6_passive_enabled']).lower() == 'true'
         
@@ -399,8 +399,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         key_prefix = api_key[:8]
         
         # Look up key in database
-        from pyngding.db import get_api_key_by_prefix
-        from pyngding.api_keys import verify_api_key
+        from pyngding.core.db import get_api_key_by_prefix
+        from pyngding.web.api_keys import verify_api_key
         import time
         
         key_record = get_api_key_by_prefix(db_path, key_prefix)
@@ -412,7 +412,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             return False
         
         # Update last used timestamp
-        from pyngding.db import update_api_key_last_used
+        from pyngding.core.db import update_api_key_last_used
         update_api_key_last_used(db_path, key_record['id'], now_ts=int(time.time()))
         
         return True
@@ -450,7 +450,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         if status_filter not in ('up', 'down', ''):
             status_filter = ''
         
-        from pyngding.db import get_hosts_with_profiles
+        from pyngding.core.db import get_hosts_with_profiles
         hosts = get_hosts_with_profiles(db_path)
         
         # Filter by status if requested
@@ -510,8 +510,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         if not metrics_enabled:
             abort(404, 'Metrics disabled')
         
-        from pyngding.db import get_db
-        from pyngding.scheduler import get_scan_stats
+        from pyngding.core.db import get_db
+        from pyngding.scanning.scheduler import get_scan_stats
         
         stats = get_scan_stats(db_path)
         
@@ -566,7 +566,7 @@ pyngding_last_scan_timestamp {stats.get('last_scan_ts', 0)}
             abort(404, 'Not found')
         check_auth()
         
-        from pyngding.notifications import send_notification
+        from pyngding.integrations.notifications import send_notification
         
         channel = request.forms.get('channel', 'webhook')
         test_ip = request.forms.get('ip', '192.168.1.100')

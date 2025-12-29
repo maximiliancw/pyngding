@@ -104,7 +104,7 @@ def sanitize_setting(key: str, value: str) -> str:
 
 def get_all_settings(db_path: str) -> Dict[str, str]:
     """Get all UI settings with defaults."""
-    from pyngding.db import get_ui_setting
+    from pyngding.core.db import get_ui_setting
     
     settings = {}
     for key, default in DEFAULTS.items():

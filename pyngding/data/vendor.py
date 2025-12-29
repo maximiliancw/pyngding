@@ -88,8 +88,8 @@ _oui_lookup: Optional[OUILookup] = None
 
 def get_vendor(mac: str, db_path: str) -> Optional[str]:
     """Get vendor for a MAC address using OUI lookup if enabled."""
-    from pyngding.db import get_ui_setting
-    from pyngding.settings import DEFAULTS
+    from pyngding.core.db import get_ui_setting
+    from pyngding.web.settings import DEFAULTS
     
     oui_enabled = get_ui_setting(db_path, 'oui_lookup_enabled', DEFAULTS['oui_lookup_enabled']).lower() == 'true'
     if not oui_enabled:

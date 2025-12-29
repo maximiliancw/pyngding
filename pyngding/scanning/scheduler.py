@@ -4,17 +4,17 @@ import threading
 import time
 from typing import Optional
 
-from pyngding.config import Config
-from pyngding.db import (
+from pyngding.core.config import Config
+from pyngding.core.db import (
     create_scan_run,
     get_all_hosts,
     get_ui_setting,
     insert_observation,
     upsert_host,
 )
-from pyngding.scanner import parse_targets, scan_targets
-from pyngding.adguard import fetch_adguard_api, read_adguard_file
-from pyngding.db import (
+from pyngding.scanning.scanner import parse_targets, scan_targets
+from pyngding.integrations.adguard import fetch_adguard_api, read_adguard_file
+from pyngding.core.db import (
     insert_dns_event,
     get_adguard_state,
     set_adguard_state,
@@ -118,7 +118,7 @@ class ScanScheduler:
         # Run retention periodically
         if (started_ts - self.last_retention_run) >= self.retention_interval:
             try:
-                from pyngding.retention import run_retention, run_rollups
+                from pyngding.data.retention import run_retention, run_rollups
                 deleted = run_retention(self.db_path)
                 run_rollups(self.db_path)
                 if any(deleted.values()):
@@ -206,8 +206,8 @@ class ScanScheduler:
             )
             
             # Send notifications
-            from pyngding.db import get_device_profile
-            from pyngding.notifications import send_notification
+            from pyngding.core.db import get_device_profile
+            from pyngding.integrations.notifications import send_notification
             
             profile = get_device_profile(self.db_path, mac=result.get('mac'), ip=ip)
             label = profile['label'] if profile else None
@@ -253,7 +253,7 @@ class ScanScheduler:
     
     def _ingest_adguard(self):
         """Ingest DNS events from AdGuard."""
-        from pyngding.settings import DEFAULTS
+        from pyngding.web.settings import DEFAULTS
         
         adguard_enabled = get_ui_setting(self.db_path, 'adguard_enabled', 'false').lower() == 'true'
         if not adguard_enabled:
@@ -324,7 +324,7 @@ class ScanScheduler:
         """IPv6 neighbor collection loop."""
         while self.ipv6_running and not self.stop_event.is_set():
             try:
-                from pyngding.ipv6 import collect_ipv6_neighbors
+                from pyngding.scanning.ipv6 import collect_ipv6_neighbors
                 count = collect_ipv6_neighbors(self.db_path)
                 if count > 0:
                     print(f"IPv6: Collected {count} neighbors")
