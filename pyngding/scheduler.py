@@ -13,6 +13,13 @@ from pyngding.db import (
     upsert_host,
 )
 from pyngding.scanner import parse_targets, scan_targets
+from pyngding.adguard import fetch_adguard_api, read_adguard_file
+from pyngding.db import (
+    insert_dns_event,
+    get_adguard_state,
+    set_adguard_state,
+    update_dns_daily_rollup,
+)
 
 
 class ScanScheduler:
@@ -24,9 +31,13 @@ class ScanScheduler:
         self.running = False
         self.thread: Optional[threading.Thread] = None
         self.stop_event = threading.Event()
+        
+        # AdGuard scheduler
+        self.adguard_running = False
+        self.adguard_thread: Optional[threading.Thread] = None
     
     def start(self):
-        """Start the scan scheduler thread."""
+        """Start the scan scheduler thread and AdGuard ingestion if enabled."""
         if self.running:
             return
         
@@ -34,13 +45,31 @@ class ScanScheduler:
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
+        
+        # Start AdGuard ingestion if enabled
+        adguard_enabled = get_ui_setting(self.db_path, 'adguard_enabled', 'false').lower() == 'true'
+        if adguard_enabled:
+            self.start_adguard()
+    
+    def start_adguard(self):
+        """Start AdGuard ingestion thread."""
+        if self.adguard_running:
+            return
+        
+        self.adguard_running = True
+        self.adguard_thread = threading.Thread(target=self._adguard_loop, daemon=True)
+        self.adguard_thread.start()
     
     def stop(self):
-        """Stop the scan scheduler thread."""
+        """Stop the scan scheduler thread and AdGuard ingestion."""
         self.running = False
         self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=5.0)
+        
+        self.adguard_running = False
+        if self.adguard_thread:
+            self.adguard_thread.join(timeout=5.0)
     
     def _run_loop(self):
         """Main scan loop."""
@@ -162,6 +191,90 @@ class ScanScheduler:
                 )
         
         print(f"Scan completed: {up_count} up, {down_count} down, {len(targets)} targets")
+    
+    def _adguard_loop(self):
+        """AdGuard ingestion loop."""
+        while self.adguard_running and not self.stop_event.is_set():
+            try:
+                self._ingest_adguard()
+            except Exception as e:
+                print(f"Error in AdGuard ingestion: {e}", file=__import__('sys').stderr)
+            
+            # Get interval
+            interval = int(get_ui_setting(self.db_path, 'adguard_ingest_interval_seconds', '30'))
+            if not self.stop_event.wait(interval):
+                continue
+            else:
+                break
+    
+    def _ingest_adguard(self):
+        """Ingest DNS events from AdGuard."""
+        from pyngding.settings import DEFAULTS
+        
+        adguard_enabled = get_ui_setting(self.db_path, 'adguard_enabled', 'false').lower() == 'true'
+        if not adguard_enabled:
+            return
+        
+        mode = get_ui_setting(self.db_path, 'adguard_mode', 'api')
+        max_fetch = int(get_ui_setting(self.db_path, 'adguard_max_fetch', '500'))
+        
+        events = []
+        
+        if mode == 'api':
+            base_url = get_ui_setting(self.db_path, 'adguard_base_url', '')
+            username = get_ui_setting(self.db_path, 'adguard_username', '') or None
+            password = get_ui_setting(self.db_path, 'adguard_password', '') or None
+            
+            if not base_url:
+                return
+            
+            state = get_adguard_state(self.db_path)
+            events = fetch_adguard_api(base_url, username, password, max_fetch, state['last_seen_ts'])
+            
+            if events:
+                # Update last_seen_ts to most recent event
+                latest_ts = max(e['ts'] for e in events)
+                set_adguard_state(self.db_path, last_seen_ts=latest_ts)
+        
+        elif mode == 'file':
+            file_path = get_ui_setting(self.db_path, 'adguard_querylog_path', '')
+            if not file_path:
+                return
+            
+            state = get_adguard_state(self.db_path)
+            events, new_offset = read_adguard_file(file_path, state['last_offset'])
+            set_adguard_state(self.db_path, last_offset=new_offset)
+        
+        # Insert events and update rollups
+        now = int(time.time())
+        today_yyyymmdd = int(time.strftime('%Y%m%d', time.localtime(now)))
+        
+        for event in events:
+            insert_dns_event(
+                self.db_path,
+                ts=event['ts'],
+                client_ip=event['client_ip'],
+                domain=event['domain'],
+                qtype=event.get('qtype'),
+                status=event.get('status'),
+                upstream=event.get('upstream')
+            )
+            
+            # Update daily rollup (simplified - just increment)
+            # In production, you'd want to batch these updates
+            event_day = int(time.strftime('%Y%m%d', time.localtime(event['ts'])))
+            blocked = 1 if event.get('status') == 'blocked' else 0
+            update_dns_daily_rollup(
+                self.db_path,
+                day_yyyymmdd=event_day,
+                client_ip=event['client_ip'],
+                total_queries=1,
+                blocked_queries=blocked,
+                unique_domains=0  # Will be recalculated by SQL
+            )
+        
+        if events:
+            print(f"AdGuard: Ingested {len(events)} DNS events")
 
 
 def get_scan_stats(db_path: str) -> dict:

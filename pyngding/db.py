@@ -413,3 +413,101 @@ def delete_api_key(db_path: str, key_id: int) -> bool:
         cursor = conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
         return cursor.rowcount > 0
 
+
+# AdGuard DNS functions
+def insert_dns_event(db_path: str, ts: int, client_ip: str, domain: str,
+                    qtype: Optional[str] = None, status: Optional[str] = None,
+                    upstream: Optional[str] = None) -> None:
+    """Insert a DNS event."""
+    with get_db(db_path) as conn:
+        conn.execute("""
+            INSERT INTO dns_events (ts, client_ip, domain, qtype, status, upstream)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (ts, client_ip, domain, qtype, status, upstream))
+
+
+def get_adguard_state(db_path: str) -> Dict:
+    """Get AdGuard ingestion state (last_seen_ts, last_offset)."""
+    with get_db(db_path) as conn:
+        last_seen_ts = get_ui_setting(db_path, 'adguard_last_seen_ts', None)
+        last_offset = int(get_ui_setting(db_path, 'adguard_last_offset', '0'))
+        return {
+            'last_seen_ts': int(last_seen_ts) if last_seen_ts else None,
+            'last_offset': last_offset
+        }
+
+
+def set_adguard_state(db_path: str, last_seen_ts: Optional[int] = None,
+                     last_offset: Optional[int] = None) -> None:
+    """Update AdGuard ingestion state."""
+    if last_seen_ts is not None:
+        set_ui_setting(db_path, 'adguard_last_seen_ts', str(last_seen_ts))
+    if last_offset is not None:
+        set_ui_setting(db_path, 'adguard_last_offset', str(last_offset))
+
+
+def update_dns_daily_rollup(db_path: str, day_yyyymmdd: int, client_ip: str,
+                           total_queries: int, blocked_queries: int,
+                           unique_domains: int) -> None:
+    """Update or insert daily DNS rollup for a client."""
+    with get_db(db_path) as conn:
+        conn.execute("""
+            INSERT INTO dns_daily_client (day_yyyymmdd, client_ip, total_queries, blocked_queries, unique_domains)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(day_yyyymmdd, client_ip) DO UPDATE SET
+                total_queries = total_queries + excluded.total_queries,
+                blocked_queries = blocked_queries + excluded.blocked_queries,
+                unique_domains = (SELECT COUNT(DISTINCT domain) FROM dns_events 
+                                 WHERE client_ip = excluded.client_ip 
+                                 AND ts >= excluded.day_yyyymmdd * 86400 
+                                 AND ts < (excluded.day_yyyymmdd + 1) * 86400)
+        """, (day_yyyymmdd, client_ip, total_queries, blocked_queries, unique_domains))
+
+
+def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> Dict:
+    """Get DNS summary for a host (recent domains, top domains, stats)."""
+    with get_db(db_path) as conn:
+        # Recent domains
+        recent_rows = conn.execute("""
+            SELECT domain, ts, status FROM dns_events
+            WHERE client_ip = ?
+            ORDER BY ts DESC
+            LIMIT ?
+        """, (client_ip, limit)).fetchall()
+        
+        recent_domains = [{'domain': r[0], 'ts': r[1], 'status': r[2]} for r in recent_rows]
+        
+        # Top domains (last 24h)
+        day_start = int(time.time()) - 86400
+        top_rows = conn.execute("""
+            SELECT domain, COUNT(*) as cnt FROM dns_events
+            WHERE client_ip = ? AND ts >= ?
+            GROUP BY domain
+            ORDER BY cnt DESC
+            LIMIT 10
+        """, (client_ip, day_start)).fetchall()
+        
+        top_domains = [{'domain': r[0], 'count': r[1]} for r in top_rows]
+        
+        # Stats (last 24h)
+        stats_row = conn.execute("""
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) as blocked,
+                COUNT(DISTINCT domain) as unique_domains
+            FROM dns_events
+            WHERE client_ip = ? AND ts >= ?
+        """, (client_ip, day_start)).fetchone()
+        
+        stats = {
+            'total_queries': stats_row[0] if stats_row else 0,
+            'blocked_queries': stats_row[1] if stats_row else 0,
+            'unique_domains': stats_row[2] if stats_row else 0
+        }
+        
+        return {
+            'recent_domains': recent_domains,
+            'top_domains': top_domains,
+            'stats': stats
+        }
+

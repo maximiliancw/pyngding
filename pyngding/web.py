@@ -124,6 +124,20 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         
         return template('partials/hosts-table.tpl', hosts=all_hosts)
     
+    @app.route('/partials/dns-host/<ip>')
+    def partials_dns_host(ip):
+        require_auth_if_enabled()
+        
+        from pyngding.db import get_host_dns_summary
+        from pyngding.settings import DEFAULTS
+        
+        adguard_enabled = get_ui_setting_helper(db_path, 'adguard_enabled', DEFAULTS['adguard_enabled']).lower() == 'true'
+        if not adguard_enabled:
+            return template('partials/dns-host.tpl', enabled=False, ip=ip)
+        
+        summary = get_host_dns_summary(db_path, ip, limit=20)
+        return template('partials/dns-host.tpl', enabled=True, ip=ip, summary=summary)
+    
     # Admin routes (only accessible when auth is enabled)
     @app.route('/admin/settings')
     def admin_settings():
@@ -302,6 +316,32 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
             return ''
         except ValueError:
             abort(404, 'Invalid key ID')
+    
+    @app.route('/admin/adguard')
+    def admin_adguard():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import get_adguard_state, get_db
+        from pyngding.settings import DEFAULTS
+        
+        adguard_enabled = get_ui_setting_helper(db_path, 'adguard_enabled', DEFAULTS['adguard_enabled']).lower() == 'true'
+        state = get_adguard_state(db_path)
+        
+        # Get event counts
+        with get_db(db_path) as conn:
+            total_events = conn.execute("SELECT COUNT(*) FROM dns_events").fetchone()[0]
+            recent_events = conn.execute("""
+                SELECT COUNT(*) FROM dns_events WHERE ts >= ?
+            """, (int(time.time()) - 3600,)).fetchone()[0]
+        
+        return template('admin_adguard.tpl', 
+                       adguard_enabled=adguard_enabled,
+                       state=state,
+                       total_events=total_events,
+                       recent_events=recent_events,
+                       auth_enabled=True)
     
     @app.route('/admin/<path:path>')
     def admin_404(path):
