@@ -15,6 +15,11 @@
             <div class="nav-links">
                 <a href="/">Dashboard</a>
                 <a href="/hosts">Hosts</a>
+                % if auth_enabled:
+                <a href="/admin/settings">Settings</a>
+                <a href="/admin/api-keys">API Keys</a>
+                <a href="/admin/hosts">Device Inventory</a>
+                % end
             </div>
         </div>
     </nav>

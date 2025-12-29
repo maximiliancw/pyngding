@@ -1,4 +1,4 @@
-% rebase('layout.tpl', title='Dashboard')
+% rebase('layout.tpl', title='Dashboard', auth_enabled=auth_enabled)
 <div class="dashboard">
     <h2>Dashboard</h2>
     
