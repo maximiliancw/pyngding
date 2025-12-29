@@ -340,7 +340,7 @@ class ScanScheduler:
 
 def get_scan_stats(db_path: str) -> dict:
     """Get basic dashboard statistics."""
-    from pyngding.db import get_db
+    from pyngding.core.db import get_db
     
     stats = {
         'up_count': 0,
