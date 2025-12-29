@@ -222,6 +222,87 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         response.headers['Location'] = '/admin/hosts'
         return ''
     
+    @app.route('/admin/api-keys')
+    def admin_api_keys():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import get_all_api_keys
+        api_keys = get_all_api_keys(db_path)
+        return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, new_key=None)
+    
+    @app.route('/admin/api-keys', method='POST')
+    def admin_api_keys_create():
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.api_keys import generate_api_key, hash_api_key
+        from pyngding.db import create_api_key, get_all_api_keys
+        import time
+        
+        name = request.forms.get('name', '').strip()
+        if not name:
+            api_keys = get_all_api_keys(db_path)
+            return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, 
+                          new_key=None, error='Name is required')
+        
+        # Generate key
+        full_key, key_prefix = generate_api_key()
+        key_hash = hash_api_key(full_key)
+        
+        # Store in DB
+        create_api_key(db_path, name, key_prefix, key_hash, now_ts=int(time.time()))
+        
+        # Show key once
+        api_keys = get_all_api_keys(db_path)
+        return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, 
+                       new_key={'name': name, 'key': full_key, 'prefix': key_prefix})
+    
+    @app.route('/admin/api-keys/<key_id>/toggle', method='POST')
+    def admin_api_keys_toggle(key_id):
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import get_all_api_keys, toggle_api_key
+        
+        try:
+            key_id_int = int(key_id)
+            # Get current state
+            all_keys = get_all_api_keys(db_path)
+            key = next((k for k in all_keys if k['id'] == key_id_int), None)
+            if not key:
+                abort(404, 'API key not found')
+            
+            # Toggle
+            toggle_api_key(db_path, key_id_int, not key['is_enabled'])
+            
+            response.status = 303
+            response.headers['Location'] = '/admin/api-keys'
+            return ''
+        except ValueError:
+            abort(404, 'Invalid key ID')
+    
+    @app.route('/admin/api-keys/<key_id>/delete', method='POST')
+    def admin_api_keys_delete(key_id):
+        if not config.auth_enabled:
+            abort(404, 'Not found')
+        check_auth()
+        
+        from pyngding.db import delete_api_key
+        
+        try:
+            key_id_int = int(key_id)
+            delete_api_key(db_path, key_id_int)
+            
+            response.status = 303
+            response.headers['Location'] = '/admin/api-keys'
+            return ''
+        except ValueError:
+            abort(404, 'Invalid key ID')
+    
     @app.route('/admin/<path:path>')
     def admin_404(path):
         if not config.auth_enabled:
