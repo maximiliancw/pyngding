@@ -466,6 +466,7 @@ def update_dns_daily_rollup(db_path: str, day_yyyymmdd: int, client_ip: str,
 
 def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> Dict:
     """Get DNS summary for a host (recent domains, top domains, stats)."""
+    import time
     with get_db(db_path) as conn:
         # Recent domains
         recent_rows = conn.execute("""
