@@ -53,6 +53,9 @@ def serve(args):
     """Start the pyngding server."""
     from pyngding.config import load_config
     from pyngding.db import init_db
+    from pyngding.scheduler import ScanScheduler
+    from pyngding.web import create_app
+    import signal
     
     try:
         config = load_config(args.config)
@@ -65,7 +68,25 @@ def serve(args):
         init_db(config.db_path)
         print("Database initialized")
         
-        print("(Web server will be implemented in Step 6+)")
+        # Start scan scheduler
+        scheduler = ScanScheduler(config, config.db_path)
+        scheduler.start()
+        print("Scan scheduler started")
+        
+        # Create and run web app
+        app = create_app(config, config.db_path, scheduler)
+        
+        def shutdown_handler(signum, frame):
+            print("\nShutting down...")
+            scheduler.stop()
+            sys.exit(0)
+        
+        signal.signal(signal.SIGINT, shutdown_handler)
+        signal.signal(signal.SIGTERM, shutdown_handler)
+        
+        print(f"Web server starting on http://{config.bind_host}:{config.bind_port}")
+        app.run(host=config.bind_host, port=config.bind_port, quiet=True)
+        
         return 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
