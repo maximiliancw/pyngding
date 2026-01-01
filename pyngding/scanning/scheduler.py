@@ -14,8 +14,11 @@ from pyngding.core.db import (
     update_dns_daily_rollup,
     upsert_host,
 )
+from pyngding.core.logger import get_logger
 from pyngding.integrations.adguard import fetch_adguard_api, read_adguard_file
 from pyngding.scanning.scanner import parse_targets, scan_targets
+
+logger = get_logger('scheduler')
 
 
 class ScanScheduler:
@@ -99,7 +102,7 @@ class ScanScheduler:
             try:
                 self._run_scan()
             except Exception as e:
-                print(f"Error in scan loop: {e}", file=__import__('sys').stderr)
+                logger.error(f"Error in scan loop: {e}")
 
             # Wait for next interval (or stop if event is set)
             if not self.stop_event.wait(self.config.scan_interval_seconds):
@@ -118,10 +121,10 @@ class ScanScheduler:
                 deleted = run_retention(self.db_path)
                 run_rollups(self.db_path)
                 if any(deleted.values()):
-                    print(f"Retention: Deleted {deleted}")
+                    logger.info(f"Retention: Deleted {deleted}")
                 self.last_retention_run = started_ts
             except Exception as e:
-                print(f"Error in retention: {e}", file=__import__('sys').stderr)
+                logger.error(f"Error in retention: {e}")
 
         # Parse targets
         targets = parse_targets(self.config.scan_targets, self.config.target_cap)
@@ -230,7 +233,7 @@ class ScanScheduler:
                     extra={'old_mac': existing.get('mac'), 'new_mac': result.get('mac')}
                 )
 
-        print(f"Scan completed: {up_count} up, {down_count} down, {len(targets)} targets")
+        logger.info(f"Scan completed: {up_count} up, {down_count} down, {len(targets)} targets")
 
     def _adguard_loop(self):
         """AdGuard ingestion loop."""
@@ -238,7 +241,7 @@ class ScanScheduler:
             try:
                 self._ingest_adguard()
             except Exception as e:
-                print(f"Error in AdGuard ingestion: {e}", file=__import__('sys').stderr)
+                logger.error(f"Error in AdGuard ingestion: {e}")
 
             # Get interval
             interval = int(get_ui_setting(self.db_path, 'adguard_ingest_interval_seconds', '30'))
@@ -310,7 +313,7 @@ class ScanScheduler:
             )
 
         if events:
-            print(f"AdGuard: Ingested {len(events)} DNS events")
+            logger.info(f"AdGuard: Ingested {len(events)} DNS events")
 
     def _ipv6_loop(self):
         """IPv6 neighbor collection loop."""
@@ -319,9 +322,9 @@ class ScanScheduler:
                 from pyngding.scanning.ipv6 import collect_ipv6_neighbors
                 count = collect_ipv6_neighbors(self.db_path)
                 if count > 0:
-                    print(f"IPv6: Collected {count} neighbors")
+                    logger.debug(f"IPv6: Collected {count} neighbors")
             except Exception as e:
-                print(f"Error in IPv6 collection: {e}", file=__import__('sys').stderr)
+                logger.error(f"Error in IPv6 collection: {e}")
 
             # Run every 5 minutes
             if not self.stop_event.wait(300):
@@ -378,4 +381,3 @@ def get_scan_stats(db_path: str) -> dict:
         stats['missing_count'] = missing_row[0] if missing_row else 0
 
     return stats
-

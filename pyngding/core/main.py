@@ -75,12 +75,18 @@ def oui_import(args):
 
 def serve(args):
     """Start the pyngding server."""
+    import logging
     import signal
 
     from pyngding.core.config import load_config
     from pyngding.core.db import init_db
+    from pyngding.core.logger import configure_logging, get_logger
     from pyngding.scanning.scheduler import ScanScheduler
     from pyngding.web.web import create_app
+
+    # Configure logging before anything else
+    configure_logging(level=logging.INFO)
+    logger = get_logger()
 
     try:
         # Check if config file exists, create default if not
@@ -126,9 +132,7 @@ def serve(args):
 
         return 0
     except Exception as e:
-        print(f"Error: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Error: {e}", exc_info=True)
         return 1
 
 

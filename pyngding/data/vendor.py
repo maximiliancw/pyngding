@@ -1,6 +1,10 @@
 """OUI vendor lookup from local file."""
 import re
 
+from pyngding.core.logger import get_logger
+
+logger = get_logger('vendor')
+
 
 class OUILookup:
     """OUI vendor lookup from a local file."""
@@ -59,7 +63,7 @@ class OUILookup:
         except FileNotFoundError:
             pass
         except Exception as e:
-            print(f"Error loading OUI file: {e}", file=__import__('sys').stderr)
+            logger.error(f"Error loading OUI file: {e}")
 
         return count
 

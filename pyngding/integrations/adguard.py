@@ -5,6 +5,10 @@ import time
 import urllib.error
 import urllib.request
 
+from pyngding.core.logger import get_logger
+
+logger = get_logger('adguard')
+
 
 def fetch_adguard_api(base_url: str, username: str | None = None,
                      password: str | None = None, max_fetch: int = 500,
@@ -49,7 +53,7 @@ def fetch_adguard_api(base_url: str, username: str | None = None,
 
             return events
     except Exception as e:
-        print(f"Error fetching AdGuard API: {e}", file=__import__('sys').stderr)
+        logger.error(f"Error fetching AdGuard API: {e}")
         return []
 
 
@@ -104,6 +108,6 @@ def read_adguard_file(file_path: str, last_offset: int = 0) -> tuple[list[dict],
     except FileNotFoundError:
         return [], last_offset
     except Exception as e:
-        print(f"Error reading AdGuard file: {e}", file=__import__('sys').stderr)
+        logger.error(f"Error reading AdGuard file: {e}")
         return [], last_offset
 

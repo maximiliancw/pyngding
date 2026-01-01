@@ -2,6 +2,10 @@
 import subprocess
 import time
 
+from pyngding.core.logger import get_logger
+
+logger = get_logger('ipv6')
+
 
 def get_ipv6_neighbors() -> list[dict]:
     """Get IPv6 neighbors from 'ip -6 neigh show'.
@@ -43,7 +47,7 @@ def get_ipv6_neighbors() -> list[dict]:
                         })
     except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
         # Best effort - if ip command fails, continue without IPv6 data
-        print(f"Warning: Could not get IPv6 neighbors: {e}", file=__import__('sys').stderr)
+        logger.warning(f"Could not get IPv6 neighbors: {e}")
 
     return neighbors
 
