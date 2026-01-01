@@ -3,7 +3,6 @@ import configparser
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -19,7 +18,7 @@ class Config:
     ping_count: int = 1
     max_workers: int = 32
     target_cap: int = 4096
-    
+
     # Auth settings
     auth_enabled: bool = False
     auth_username: str = "admin"
@@ -27,23 +26,23 @@ class Config:
     auth_realm: str = "pyngding"
 
 
-def load_config(config_path: Optional[str] = None) -> Config:
+def load_config(config_path: str | None = None) -> Config:
     """Load configuration from config.ini file with environment variable overrides.
-    
+
     Environment variables use prefix PYNGDING_ and are uppercase.
     Example: PYNGDING_BIND_PORT=9000 overrides bind_port.
     """
     config = Config()
-    
+
     # Load from file if it exists
     if config_path is None:
         config_path = os.getenv("PYNGDING_CONFIG", "config.ini")
-    
+
     config_file = Path(config_path)
     if config_file.exists():
         parser = configparser.ConfigParser()
         parser.read(config_file)
-        
+
         # Load [pyngding] section
         if "pyngding" in parser:
             section = parser["pyngding"]
@@ -56,7 +55,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
             config.ping_count = section.getint("ping_count", config.ping_count)
             config.max_workers = section.getint("max_workers", config.max_workers)
             config.target_cap = section.getint("target_cap", config.target_cap)
-        
+
         # Load [auth] section
         if "auth" in parser:
             section = parser["auth"]
@@ -64,16 +63,16 @@ def load_config(config_path: Optional[str] = None) -> Config:
             config.auth_username = section.get("username", config.auth_username)
             config.auth_password_hash = section.get("password_hash", config.auth_password_hash)
             config.auth_realm = section.get("realm", config.auth_realm)
-    
+
     # Apply environment variable overrides
     env_prefix = "PYNGDING_"
     for key, value in os.environ.items():
         if not key.startswith(env_prefix):
             continue
-        
+
         # Remove prefix and convert to lowercase
         config_key = key[len(env_prefix):].lower()
-        
+
         # Map environment variable names to config attributes
         if config_key == "bind_host":
             config.bind_host = value
@@ -101,10 +100,10 @@ def load_config(config_path: Optional[str] = None) -> Config:
             config.auth_password_hash = value
         elif config_key == "auth_realm":
             config.auth_realm = value
-    
+
     # Validate max_workers cap
     if config.max_workers > 64:
         config.max_workers = 64
-    
+
     return config
 

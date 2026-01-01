@@ -2,7 +2,6 @@
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 @contextmanager
@@ -24,14 +23,14 @@ def init_db(db_path: str) -> None:
     """Initialize database schema with WAL mode and all tables."""
     db_file = Path(db_path)
     db_file.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with get_db(db_path) as conn:
         # Set PRAGMAs
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA temp_store=MEMORY")
         conn.execute("PRAGMA foreign_keys=ON")
-        
+
         # Table 1: hosts (current view per IP)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS hosts (
@@ -46,7 +45,7 @@ def init_db(db_path: str) -> None:
                 last_rtt_ms INTEGER NULL
             )
         """)
-        
+
         # Table 2: scan_runs
         conn.execute("""
             CREATE TABLE IF NOT EXISTS scan_runs (
@@ -58,7 +57,7 @@ def init_db(db_path: str) -> None:
                 down_count INTEGER NOT NULL
             )
         """)
-        
+
         # Table 3: observations (raw scan history)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS observations (
@@ -74,7 +73,7 @@ def init_db(db_path: str) -> None:
         """)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_run_id ON observations(run_id)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_observations_ip ON observations(ip)")
-        
+
         # Table 4: device_profiles (admin inventory metadata)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS device_profiles (
@@ -89,7 +88,7 @@ def init_db(db_path: str) -> None:
                 updated_ts INTEGER NOT NULL
             )
         """)
-        
+
         # Table 5: stats_daily (rollups)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS stats_daily (
@@ -101,7 +100,7 @@ def init_db(db_path: str) -> None:
                 vanished_hosts INTEGER NOT NULL
             )
         """)
-        
+
         # Table 6: ui_settings
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ui_settings (
@@ -109,7 +108,7 @@ def init_db(db_path: str) -> None:
                 value TEXT NOT NULL
             )
         """)
-        
+
         # Table 7: api_keys
         conn.execute("""
             CREATE TABLE IF NOT EXISTS api_keys (
@@ -122,7 +121,7 @@ def init_db(db_path: str) -> None:
                 is_enabled INTEGER NOT NULL DEFAULT 1
             )
         """)
-        
+
         # Table 8: dns_events (AdGuard DNS ingestion)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS dns_events (
@@ -138,7 +137,7 @@ def init_db(db_path: str) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_dns_events_ts ON dns_events(ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_dns_events_client_ip_ts ON dns_events(client_ip, ts)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_dns_events_domain ON dns_events(domain)")
-        
+
         # Table 9: dns_daily_client (cheap rollup)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS dns_daily_client (
@@ -150,7 +149,7 @@ def init_db(db_path: str) -> None:
                 PRIMARY KEY (day_yyyymmdd, client_ip)
             )
         """)
-        
+
         # Table 10: ipv6_neighbors (passive IPv6)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS ipv6_neighbors (
@@ -167,21 +166,21 @@ def init_db(db_path: str) -> None:
 
 # Core query functions
 
-def get_host(db_path: str, ip: str) -> Optional[Dict]:
+def get_host(db_path: str, ip: str) -> dict | None:
     """Get a host by IP."""
     with get_db(db_path) as conn:
         row = conn.execute("SELECT * FROM hosts WHERE ip = ?", (ip,)).fetchone()
         return dict(row) if row else None
 
 
-def upsert_host(db_path: str, ip: str, mac: Optional[str] = None, hostname: Optional[str] = None,
-                vendor: Optional[str] = None, status: str = "up", rtt_ms: Optional[int] = None,
-                now_ts: Optional[int] = None) -> None:
+def upsert_host(db_path: str, ip: str, mac: str | None = None, hostname: str | None = None,
+                vendor: str | None = None, status: str = "up", rtt_ms: int | None = None,
+                now_ts: int | None = None) -> None:
     """Insert or update a host record."""
     import time
     if now_ts is None:
         now_ts = int(time.time())
-    
+
     with get_db(db_path) as conn:
         existing = conn.execute("SELECT id, first_seen_ts FROM hosts WHERE ip = ?", (ip,)).fetchone()
         if existing:
@@ -216,8 +215,8 @@ def create_scan_run(db_path: str, started_ts: int, finished_ts: int, targets_cou
 
 
 def insert_observation(db_path: str, run_id: int, ip: str, status: str,
-                       rtt_ms: Optional[int] = None, mac: Optional[str] = None,
-                       hostname: Optional[str] = None) -> None:
+                       rtt_ms: int | None = None, mac: str | None = None,
+                       hostname: str | None = None) -> None:
     """Insert an observation record."""
     with get_db(db_path) as conn:
         conn.execute("""
@@ -226,7 +225,7 @@ def insert_observation(db_path: str, run_id: int, ip: str, status: str,
         """, (run_id, ip, status, rtt_ms, mac, hostname))
 
 
-def get_all_hosts(db_path: str, status: Optional[str] = None) -> List[Dict]:
+def get_all_hosts(db_path: str, status: str | None = None) -> list[dict]:
     """Get all hosts, optionally filtered by status."""
     with get_db(db_path) as conn:
         if status:
@@ -236,7 +235,7 @@ def get_all_hosts(db_path: str, status: Optional[str] = None) -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-def get_recent_scan_runs(db_path: str, limit: int = 200) -> List[Dict]:
+def get_recent_scan_runs(db_path: str, limit: int = 200) -> list[dict]:
     """Get recent scan runs for charting."""
     with get_db(db_path) as conn:
         rows = conn.execute("""
@@ -247,7 +246,7 @@ def get_recent_scan_runs(db_path: str, limit: int = 200) -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-def get_ui_setting(db_path: str, key: str, default: Optional[str] = None) -> Optional[str]:
+def get_ui_setting(db_path: str, key: str, default: str | None = None) -> str | None:
     """Get a UI setting value."""
     with get_db(db_path) as conn:
         row = conn.execute("SELECT value FROM ui_settings WHERE key = ?", (key,)).fetchone()
@@ -263,7 +262,7 @@ def set_ui_setting(db_path: str, key: str, value: str) -> None:
         """, (key, value))
 
 
-def get_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[str] = None) -> Optional[Dict]:
+def get_device_profile(db_path: str, mac: str | None = None, ip: str | None = None) -> dict | None:
     """Get device profile by MAC or IP."""
     with get_db(db_path) as conn:
         if mac:
@@ -275,15 +274,15 @@ def get_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[str
         return dict(row) if row else None
 
 
-def upsert_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[str] = None,
-                         label: Optional[str] = None, is_safe: bool = False,
-                         tags: Optional[str] = None, notes: Optional[str] = None,
-                         now_ts: Optional[int] = None) -> int:
+def upsert_device_profile(db_path: str, mac: str | None = None, ip: str | None = None,
+                         label: str | None = None, is_safe: bool = False,
+                         tags: str | None = None, notes: str | None = None,
+                         now_ts: int | None = None) -> int:
     """Create or update a device profile. Returns profile ID."""
     import time
     if now_ts is None:
         now_ts = int(time.time())
-    
+
     with get_db(db_path) as conn:
         # Check if exists
         existing = None
@@ -292,7 +291,7 @@ def upsert_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[
         elif ip:
             ip_key = f"ip:{ip}"
             existing = conn.execute("SELECT id FROM device_profiles WHERE ip_key = ?", (ip_key,)).fetchone()
-        
+
         if existing:
             # Update
             profile_id = existing[0]
@@ -316,7 +315,7 @@ def upsert_device_profile(db_path: str, mac: Optional[str] = None, ip: Optional[
             return cursor.lastrowid
 
 
-def get_all_device_profiles(db_path: str) -> List[Dict]:
+def get_all_device_profiles(db_path: str) -> list[dict]:
     """Get all device profiles."""
     with get_db(db_path) as conn:
         rows = conn.execute("SELECT * FROM device_profiles ORDER BY updated_ts DESC").fetchall()
@@ -330,11 +329,11 @@ def delete_device_profile(db_path: str, profile_id: int) -> bool:
         return cursor.rowcount > 0
 
 
-def get_hosts_with_profiles(db_path: str) -> List[Dict]:
+def get_hosts_with_profiles(db_path: str) -> list[dict]:
     """Get all hosts with their device profile information joined."""
     with get_db(db_path) as conn:
         rows = conn.execute("""
-            SELECT h.*, 
+            SELECT h.*,
                    dp.id as profile_id,
                    dp.label as profile_label,
                    dp.is_safe as profile_is_safe,
@@ -351,12 +350,12 @@ def get_hosts_with_profiles(db_path: str) -> List[Dict]:
 
 
 # API key functions
-def create_api_key(db_path: str, name: str, key_prefix: str, key_hash: str, now_ts: Optional[int] = None) -> int:
+def create_api_key(db_path: str, name: str, key_prefix: str, key_hash: str, now_ts: int | None = None) -> int:
     """Create a new API key record. Returns key ID."""
     import time
     if now_ts is None:
         now_ts = int(time.time())
-    
+
     with get_db(db_path) as conn:
         cursor = conn.execute("""
             INSERT INTO api_keys (name, key_prefix, key_hash, created_ts, is_enabled)
@@ -365,7 +364,7 @@ def create_api_key(db_path: str, name: str, key_prefix: str, key_hash: str, now_
         return cursor.lastrowid
 
 
-def get_all_api_keys(db_path: str) -> List[Dict]:
+def get_all_api_keys(db_path: str) -> list[dict]:
     """Get all API keys (without hashes, for display)."""
     with get_db(db_path) as conn:
         rows = conn.execute("""
@@ -376,7 +375,7 @@ def get_all_api_keys(db_path: str) -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-def get_api_key_by_prefix(db_path: str, key_prefix: str) -> Optional[Dict]:
+def get_api_key_by_prefix(db_path: str, key_prefix: str) -> dict | None:
     """Get API key record by prefix (for verification)."""
     with get_db(db_path) as conn:
         row = conn.execute("""
@@ -386,12 +385,12 @@ def get_api_key_by_prefix(db_path: str, key_prefix: str) -> Optional[Dict]:
         return dict(row) if row else None
 
 
-def update_api_key_last_used(db_path: str, key_id: int, now_ts: Optional[int] = None) -> None:
+def update_api_key_last_used(db_path: str, key_id: int, now_ts: int | None = None) -> None:
     """Update last_used_ts for an API key."""
     import time
     if now_ts is None:
         now_ts = int(time.time())
-    
+
     with get_db(db_path) as conn:
         conn.execute("""
             UPDATE api_keys SET last_used_ts = ? WHERE id = ?
@@ -416,8 +415,8 @@ def delete_api_key(db_path: str, key_id: int) -> bool:
 
 # AdGuard DNS functions
 def insert_dns_event(db_path: str, ts: int, client_ip: str, domain: str,
-                    qtype: Optional[str] = None, status: Optional[str] = None,
-                    upstream: Optional[str] = None) -> None:
+                    qtype: str | None = None, status: str | None = None,
+                    upstream: str | None = None) -> None:
     """Insert a DNS event."""
     with get_db(db_path) as conn:
         conn.execute("""
@@ -426,7 +425,7 @@ def insert_dns_event(db_path: str, ts: int, client_ip: str, domain: str,
         """, (ts, client_ip, domain, qtype, status, upstream))
 
 
-def get_adguard_state(db_path: str) -> Dict:
+def get_adguard_state(db_path: str) -> dict:
     """Get AdGuard ingestion state (last_seen_ts, last_offset)."""
     last_seen_ts = get_ui_setting(db_path, 'adguard_last_seen_ts', None)
     last_offset = int(get_ui_setting(db_path, 'adguard_last_offset', '0'))
@@ -436,8 +435,8 @@ def get_adguard_state(db_path: str) -> Dict:
     }
 
 
-def set_adguard_state(db_path: str, last_seen_ts: Optional[int] = None,
-                     last_offset: Optional[int] = None) -> None:
+def set_adguard_state(db_path: str, last_seen_ts: int | None = None,
+                     last_offset: int | None = None) -> None:
     """Update AdGuard ingestion state."""
     if last_seen_ts is not None:
         set_ui_setting(db_path, 'adguard_last_seen_ts', str(last_seen_ts))
@@ -456,14 +455,14 @@ def update_dns_daily_rollup(db_path: str, day_yyyymmdd: int, client_ip: str,
             ON CONFLICT(day_yyyymmdd, client_ip) DO UPDATE SET
                 total_queries = total_queries + excluded.total_queries,
                 blocked_queries = blocked_queries + excluded.blocked_queries,
-                unique_domains = (SELECT COUNT(DISTINCT domain) FROM dns_events 
-                                 WHERE client_ip = excluded.client_ip 
-                                 AND ts >= excluded.day_yyyymmdd * 86400 
+                unique_domains = (SELECT COUNT(DISTINCT domain) FROM dns_events
+                                 WHERE client_ip = excluded.client_ip
+                                 AND ts >= excluded.day_yyyymmdd * 86400
                                  AND ts < (excluded.day_yyyymmdd + 1) * 86400)
         """, (day_yyyymmdd, client_ip, total_queries, blocked_queries, unique_domains))
 
 
-def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> Dict:
+def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> dict:
     """Get DNS summary for a host (recent domains, top domains, stats)."""
     import time
     with get_db(db_path) as conn:
@@ -474,9 +473,9 @@ def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> Dict:
             ORDER BY ts DESC
             LIMIT ?
         """, (client_ip, limit)).fetchall()
-        
+
         recent_domains = [{'domain': r[0], 'ts': r[1], 'status': r[2]} for r in recent_rows]
-        
+
         # Top domains (last 24h)
         day_start = int(time.time()) - 86400
         top_rows = conn.execute("""
@@ -486,25 +485,25 @@ def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> Dict:
             ORDER BY cnt DESC
             LIMIT 10
         """, (client_ip, day_start)).fetchall()
-        
+
         top_domains = [{'domain': r[0], 'count': r[1]} for r in top_rows]
-        
+
         # Stats (last 24h)
         stats_row = conn.execute("""
-            SELECT 
+            SELECT
                 COUNT(*) as total,
                 SUM(CASE WHEN status = 'blocked' THEN 1 ELSE 0 END) as blocked,
                 COUNT(DISTINCT domain) as unique_domains
             FROM dns_events
             WHERE client_ip = ? AND ts >= ?
         """, (client_ip, day_start)).fetchone()
-        
+
         stats = {
             'total_queries': stats_row[0] if stats_row else 0,
             'blocked_queries': stats_row[1] if stats_row else 0,
             'unique_domains': stats_row[2] if stats_row else 0
         }
-        
+
         return {
             'recent_domains': recent_domains,
             'top_domains': top_domains,

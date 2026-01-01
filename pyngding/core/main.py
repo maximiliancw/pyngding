@@ -8,7 +8,7 @@ def hash_password(args):
     """Hash a password using PBKDF2."""
     import hashlib
     import secrets
-    
+
     password = args.password
     salt = secrets.token_bytes(16)
     hash_value = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
@@ -23,7 +23,7 @@ def init_config(args):
     if config_path.exists():
         print(f"Error: {config_path} already exists", file=sys.stderr)
         return 1
-    
+
     sample_config = """[pyngding]
 bind_host = 0.0.0.0
 bind_port = 8080
@@ -38,10 +38,10 @@ target_cap = 4096
 [auth]
 enabled = false
 username = admin
-password_hash = 
+password_hash =
 realm = pyngding
 """
-    
+
     config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(sample_config)
     print(f"Created sample config at {config_path}")
@@ -52,15 +52,15 @@ realm = pyngding
 def oui_import(args):
     """Import OUI vendor file."""
     from pyngding.data.vendor import OUILookup
-    
+
     file_path = Path(args.path)
     if not file_path.exists():
         print(f"Error: {file_path} does not exist", file=sys.stderr)
         return 1
-    
+
     lookup = OUILookup()
     count = lookup.load(str(file_path))
-    
+
     if count > 0:
         print(f"Successfully loaded {count} OUI entries from {file_path}")
         print("OUI lookup is now available. Enable it in Settings (oui_lookup_enabled = true)")
@@ -72,18 +72,19 @@ def oui_import(args):
         print("  - 'AABBCC,Vendor Name' (CSV)")
         print("  - 'AABBCC Vendor Name'")
         return 1
-    
+
     return 0
 
 
 def serve(args):
     """Start the pyngding server."""
+    import signal
+
     from pyngding.core.config import load_config
     from pyngding.core.db import init_db
     from pyngding.scanning.scheduler import ScanScheduler
     from pyngding.web.web import create_app
-    import signal
-    
+
     try:
         # Check if config file exists, create default if not
         config_path = Path(args.config)
@@ -96,36 +97,36 @@ def serve(args):
             print(f"Default config created at {config_path}")
             print("Please edit config.ini to set your scan targets and other settings.")
             print("For authentication, run: pyngding hash-password 'your-password'")
-        
+
         config = load_config(args.config)
         print(f"Starting pyngding server on {config.bind_host}:{config.bind_port}")
         print(f"Database: {config.db_path}")
         print(f"Scan targets: {config.scan_targets}")
         print(f"Auth enabled: {config.auth_enabled}")
-        
+
         # Initialize database
         init_db(config.db_path)
         print("Database initialized")
-        
+
         # Start scan scheduler
         scheduler = ScanScheduler(config, config.db_path)
         scheduler.start()
         print("Scan scheduler started")
-        
+
         # Create and run web app
         app = create_app(config, config.db_path, scheduler)
-        
+
         def shutdown_handler(signum, frame):
             print("\nShutting down...")
             scheduler.stop()
             sys.exit(0)
-        
+
         signal.signal(signal.SIGINT, shutdown_handler)
         signal.signal(signal.SIGTERM, shutdown_handler)
-        
+
         print(f"Web server starting on http://{config.bind_host}:{config.bind_port}")
         app.run(host=config.bind_host, port=config.bind_port, quiet=True)
-        
+
         return 0
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -138,39 +139,39 @@ def cli():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(prog='pyngding', description='Lightweight LAN presence scanner')
     subparsers = parser.add_subparsers(dest='command', help='Commands')
-    
+
     # serve command
     serve_parser = subparsers.add_parser('serve', help='Start the pyngding server')
     serve_parser.add_argument('--config', type=str, default='config.ini',
                              help='Path to config.ini file (default: config.ini)')
     serve_parser.set_defaults(func=serve)
-    
+
     # hash-password command
     hash_parser = subparsers.add_parser('hash-password', help='Hash a password for config.ini')
     hash_parser.add_argument('password', type=str, help='Password to hash')
     hash_parser.set_defaults(func=hash_password)
-    
+
     # init-config command
     init_parser = subparsers.add_parser('init-config', help='Create a sample config.ini file')
     init_parser.add_argument('--path', type=str, default='config.ini',
                             help='Path where to create config.ini (default: config.ini)')
     init_parser.set_defaults(func=init_config)
-    
+
     # oui subcommands
     oui_parser = subparsers.add_parser('oui', help='OUI vendor lookup commands')
     oui_subparsers = oui_parser.add_subparsers(dest='oui_command', help='OUI commands')
-    
+
     oui_import_parser = oui_subparsers.add_parser('import', help='Import OUI vendor file')
     oui_import_parser.add_argument('--path', type=str, required=True,
                                    help='Path to OUI file (txt or csv)')
     oui_import_parser.set_defaults(func=oui_import)
-    
+
     args = parser.parse_args()
-    
+
     if not args.command:
         parser.print_help()
         return 1
-    
+
     return args.func(args)
 
 

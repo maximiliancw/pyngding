@@ -1,9 +1,8 @@
 """UI settings defaults and validation."""
-from typing import Any, Dict, Optional, Tuple
-
+from typing import Any
 
 # Default values for UI settings
-DEFAULTS: Dict[str, Any] = {
+DEFAULTS: dict[str, Any] = {
     'reverse_dns': 'true',
     'missing_threshold_minutes': '10',
     'chart_window_runs': '200',
@@ -50,14 +49,14 @@ DEFAULTS: Dict[str, Any] = {
 }
 
 
-def validate_setting(key: str, value: str) -> Tuple[bool, Optional[str]]:
+def validate_setting(key: str, value: str) -> tuple[bool, str | None]:
     """Validate a setting value. Returns (is_valid, error_message)."""
     # Boolean settings
     if key.endswith('_enabled') or key.startswith('notify_on_'):
         if value.lower() not in ('true', 'false', '1', '0', 'yes', 'no', 'on', 'off'):
             return False, f"Invalid boolean value for {key}"
         return True, None
-    
+
     # Integer settings
     if key.endswith('_seconds') or key.endswith('_minutes') or key.endswith('_days') or \
        key.endswith('_rps') or key.endswith('_runs') or key.endswith('_fetch') or \
@@ -74,16 +73,16 @@ def validate_setting(key: str, value: str) -> Tuple[bool, Optional[str]]:
             return True, None
         except ValueError:
             return False, f"{key} must be an integer"
-    
+
     # URL settings
     if key.endswith('_url') and value:
         if not (value.startswith('http://') or value.startswith('https://')):
             return False, f"{key} must be a valid URL starting with http:// or https://"
-    
+
     # String settings - basic sanitization
     if len(value) > 1000:
         return False, f"{key} value too long (max 1000 characters)"
-    
+
     return True, None
 
 
@@ -91,24 +90,24 @@ def sanitize_setting(key: str, value: str) -> str:
     """Sanitize a setting value."""
     # Strip whitespace
     value = value.strip()
-    
+
     # Normalize boolean values
     if key.endswith('_enabled') or key.startswith('notify_on_'):
         if value.lower() in ('true', '1', 'yes', 'on'):
             return 'true'
         elif value.lower() in ('false', '0', 'no', 'off'):
             return 'false'
-    
+
     return value
 
 
-def get_all_settings(db_path: str) -> Dict[str, str]:
+def get_all_settings(db_path: str) -> dict[str, str]:
     """Get all UI settings with defaults."""
     from pyngding.core.db import get_ui_setting
-    
+
     settings = {}
     for key, default in DEFAULTS.items():
         settings[key] = get_ui_setting(db_path, key, default)
-    
+
     return settings
 
