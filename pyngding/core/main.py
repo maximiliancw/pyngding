@@ -6,13 +6,10 @@ from pathlib import Path
 
 def hash_password(args):
     """Hash a password using PBKDF2."""
-    import hashlib
-    import secrets
+    from pyngding.core.crypto import create_pbkdf2_hash
 
     password = args.password
-    salt = secrets.token_bytes(16)
-    hash_value = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-    hash_str = f"pbkdf2:sha256:100000:{salt.hex()}:{hash_value.hex()}"
+    hash_str = create_pbkdf2_hash(password)
     print(hash_str)
     return 0
 
