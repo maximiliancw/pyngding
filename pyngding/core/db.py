@@ -1,22 +1,66 @@
 """SQLite database initialization and core queries."""
 import sqlite3
+import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
+
+# Thread-local storage for connection caching
+_thread_local = threading.local()
+_CONNECTION_TTL = 60  # seconds before recycling a connection
+
+
+def _get_cached_connection(db_path: str) -> sqlite3.Connection:
+    """Get or create a cached connection for the current thread.
+    
+    Connections are cached per-thread and reused within TTL.
+    This reduces connection overhead for frequent operations.
+    """
+    now = time.time()
+    
+    # Check if we have a valid cached connection
+    cache = getattr(_thread_local, 'conn_cache', None)
+    if cache is not None:
+        cached_path, conn, created_at = cache
+        if cached_path == db_path and (now - created_at) < _CONNECTION_TTL:
+            try:
+                # Verify connection is still valid
+                conn.execute("SELECT 1")
+                return conn
+            except sqlite3.Error:
+                # Connection is stale, close and recreate
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+        else:
+            # Different path or expired, close old connection
+            try:
+                conn.close()
+            except Exception:
+                pass
+    
+    # Create new connection
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    _thread_local.conn_cache = (db_path, conn, now)
+    return conn
 
 
 @contextmanager
 def get_db(db_path: str):
-    """Context manager for database connections."""
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
+    """Context manager for database connections.
+    
+    Uses thread-local connection caching for efficiency.
+    """
+    conn = _get_cached_connection(db_path)
     try:
         yield conn
         conn.commit()
     except Exception:
         conn.rollback()
         raise
-    finally:
-        conn.close()
+    # Note: we don't close the connection here - it's cached for reuse
 
 
 def init_db(db_path: str) -> None:
@@ -177,7 +221,6 @@ def upsert_host(db_path: str, ip: str, mac: str | None = None, hostname: str | N
                 vendor: str | None = None, status: str = "up", rtt_ms: int | None = None,
                 now_ts: int | None = None) -> None:
     """Insert or update a host record."""
-    import time
     if now_ts is None:
         now_ts = int(time.time())
 
@@ -223,6 +266,27 @@ def insert_observation(db_path: str, run_id: int, ip: str, status: str,
             INSERT INTO observations (run_id, ip, status, rtt_ms, mac, hostname)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (run_id, ip, status, rtt_ms, mac, hostname))
+
+
+def insert_observations_batch(db_path: str, observations: list[dict]) -> int:
+    """Insert multiple observation records in a single transaction.
+    
+    Args:
+        db_path: Path to the database
+        observations: List of dicts with keys: run_id, ip, status, rtt_ms, mac, hostname
+    
+    Returns:
+        Number of observations inserted.
+    """
+    if not observations:
+        return 0
+    
+    with get_db(db_path) as conn:
+        conn.executemany("""
+            INSERT INTO observations (run_id, ip, status, rtt_ms, mac, hostname)
+            VALUES (:run_id, :ip, :status, :rtt_ms, :mac, :hostname)
+        """, observations)
+        return len(observations)
 
 
 def get_all_hosts(db_path: str, status: str | None = None) -> list[dict]:
@@ -279,7 +343,6 @@ def upsert_device_profile(db_path: str, mac: str | None = None, ip: str | None =
                          tags: str | None = None, notes: str | None = None,
                          now_ts: int | None = None) -> int:
     """Create or update a device profile. Returns profile ID."""
-    import time
     if now_ts is None:
         now_ts = int(time.time())
 
@@ -352,7 +415,6 @@ def get_hosts_with_profiles(db_path: str) -> list[dict]:
 # API key functions
 def create_api_key(db_path: str, name: str, key_prefix: str, key_hash: str, now_ts: int | None = None) -> int:
     """Create a new API key record. Returns key ID."""
-    import time
     if now_ts is None:
         now_ts = int(time.time())
 
@@ -387,7 +449,6 @@ def get_api_key_by_prefix(db_path: str, key_prefix: str) -> dict | None:
 
 def update_api_key_last_used(db_path: str, key_id: int, now_ts: int | None = None) -> None:
     """Update last_used_ts for an API key."""
-    import time
     if now_ts is None:
         now_ts = int(time.time())
 
@@ -423,6 +484,27 @@ def insert_dns_event(db_path: str, ts: int, client_ip: str, domain: str,
             INSERT INTO dns_events (ts, client_ip, domain, qtype, status, upstream)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (ts, client_ip, domain, qtype, status, upstream))
+
+
+def insert_dns_events_batch(db_path: str, events: list[dict]) -> int:
+    """Insert multiple DNS events in a single transaction.
+    
+    Args:
+        db_path: Path to the database
+        events: List of dicts with keys: ts, client_ip, domain, qtype, status, upstream
+    
+    Returns:
+        Number of events inserted.
+    """
+    if not events:
+        return 0
+    
+    with get_db(db_path) as conn:
+        conn.executemany("""
+            INSERT INTO dns_events (ts, client_ip, domain, qtype, status, upstream)
+            VALUES (:ts, :client_ip, :domain, :qtype, :status, :upstream)
+        """, events)
+        return len(events)
 
 
 def get_adguard_state(db_path: str) -> dict:
@@ -464,7 +546,6 @@ def update_dns_daily_rollup(db_path: str, day_yyyymmdd: int, client_ip: str,
 
 def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> dict:
     """Get DNS summary for a host (recent domains, top domains, stats)."""
-    import time
     with get_db(db_path) as conn:
         # Recent domains
         recent_rows = conn.execute("""
@@ -509,4 +590,33 @@ def get_host_dns_summary(db_path: str, client_ip: str, limit: int = 20) -> dict:
             'top_domains': top_domains,
             'stats': stats
         }
+
+
+# IPv6 functions
+def insert_ipv6_neighbors_batch(db_path: str, neighbors: list[dict], ts: int | None = None) -> int:
+    """Insert multiple IPv6 neighbor records in a single transaction.
+    
+    Args:
+        db_path: Path to the database
+        neighbors: List of dicts with keys: ip6, mac, state
+        ts: Timestamp for all records (defaults to current time)
+    
+    Returns:
+        Number of neighbors inserted.
+    """
+    if not neighbors:
+        return 0
+    
+    if ts is None:
+        ts = int(time.time())
+    
+    # Add timestamp to each record
+    records = [{'ts': ts, 'ip6': n['ip6'], 'mac': n.get('mac'), 'state': n.get('state')} for n in neighbors]
+    
+    with get_db(db_path) as conn:
+        conn.executemany("""
+            INSERT INTO ipv6_neighbors (ts, ip6, mac, state)
+            VALUES (:ts, :ip6, :mac, :state)
+        """, records)
+        return len(records)
 

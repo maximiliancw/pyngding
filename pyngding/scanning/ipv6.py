@@ -55,26 +55,17 @@ def get_ipv6_neighbors() -> list[dict]:
 def collect_ipv6_neighbors(db_path: str) -> int:
     """Collect IPv6 neighbors and store in database.
 
+    Uses batch insert for efficiency.
+    
     Returns number of neighbors collected.
     """
-    from pyngding.core.db import get_db
+    from pyngding.core.db import insert_ipv6_neighbors_batch
 
     neighbors = get_ipv6_neighbors()
     if not neighbors:
         return 0
 
-    now_ts = int(time.time())
-    count = 0
-
-    with get_db(db_path) as conn:
-        for neighbor in neighbors:
-            conn.execute("""
-                INSERT INTO ipv6_neighbors (ts, ip6, mac, state)
-                VALUES (?, ?, ?, ?)
-            """, (now_ts, neighbor['ip6'], neighbor.get('mac'), neighbor.get('state')))
-            count += 1
-
-    return count
+    return insert_ipv6_neighbors_batch(db_path, neighbors)
 
 
 def get_recent_ipv6_neighbors(db_path: str, hours: int = 1) -> list[dict]:
