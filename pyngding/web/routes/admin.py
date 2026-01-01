@@ -18,7 +18,13 @@ from pyngding.core.db import (
 from pyngding.core.db import get_ui_setting as db_get_ui_setting
 from pyngding.web.api_keys import generate_api_key, hash_api_key
 from pyngding.web.middleware import AuthMiddleware
-from pyngding.web.settings import DEFAULTS, get_all_settings, sanitize_setting, validate_setting
+from pyngding.web.settings import (
+    DEFAULTS,
+    get_all_settings,
+    invalidate_settings_cache,
+    sanitize_setting,
+    validate_setting,
+)
 
 
 def register_routes(app, auth: AuthMiddleware, db_path: str, render_template):
@@ -58,6 +64,8 @@ def register_routes(app, auth: AuthMiddleware, db_path: str, render_template):
                 # Sanitize and save
                 sanitized = sanitize_setting(key, value)
                 set_ui_setting(db_path, key, sanitized)
+                # Invalidate cache for this setting
+                invalidate_settings_cache(db_path, key)
                 updated.append(key)
 
         if errors:

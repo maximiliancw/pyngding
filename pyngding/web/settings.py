@@ -1,5 +1,12 @@
-"""UI settings defaults and validation."""
+"""UI settings defaults and validation with TTL caching."""
+import threading
+import time
 from typing import Any
+
+# Settings cache with TTL
+_settings_cache: dict[str, tuple[str, float]] = {}  # key -> (value, expiry_ts)
+_cache_lock = threading.Lock()
+CACHE_TTL = 30  # seconds before cached settings expire
 
 # Default values for UI settings
 DEFAULTS: dict[str, Any] = {
@@ -101,13 +108,84 @@ def sanitize_setting(key: str, value: str) -> str:
     return value
 
 
-def get_all_settings(db_path: str) -> dict[str, str]:
-    """Get all UI settings with defaults."""
+def get_cached_setting(db_path: str, key: str, default: str | None = None) -> str | None:
+    """Get a UI setting with TTL caching.
+    
+    Settings are cached for CACHE_TTL seconds to reduce database reads.
+    Thread-safe for concurrent access.
+    
+    Args:
+        db_path: Path to the database
+        key: Setting key
+        default: Default value if not found
+    
+    Returns:
+        The setting value or default.
+    """
     from pyngding.core.db import get_ui_setting
+    
+    now = time.time()
+    cache_key = f"{db_path}:{key}"
+    
+    # Check cache first (with lock for thread safety)
+    with _cache_lock:
+        if cache_key in _settings_cache:
+            value, expiry = _settings_cache[cache_key]
+            if now < expiry:
+                return value
+            # Expired - remove from cache
+            del _settings_cache[cache_key]
+    
+    # Fetch from database
+    value = get_ui_setting(db_path, key, default)
+    
+    # Cache the result
+    with _cache_lock:
+        _settings_cache[cache_key] = (value, now + CACHE_TTL)
+    
+    return value
 
+
+def invalidate_settings_cache(db_path: str | None = None, key: str | None = None) -> int:
+    """Invalidate settings cache.
+    
+    Args:
+        db_path: If provided, only invalidate settings for this db_path
+        key: If provided, only invalidate this specific key
+    
+    Returns:
+        Number of cache entries invalidated.
+    """
+    with _cache_lock:
+        if db_path is None and key is None:
+            # Clear all
+            count = len(_settings_cache)
+            _settings_cache.clear()
+            return count
+        
+        # Selective invalidation
+        to_delete = []
+        for cache_key in _settings_cache:
+            if db_path and not cache_key.startswith(f"{db_path}:"):
+                continue
+            if key and not cache_key.endswith(f":{key}"):
+                continue
+            to_delete.append(cache_key)
+        
+        for k in to_delete:
+            del _settings_cache[k]
+        
+        return len(to_delete)
+
+
+def get_all_settings(db_path: str) -> dict[str, str]:
+    """Get all UI settings with defaults.
+    
+    Uses cached settings where available.
+    """
     settings = {}
     for key, default in DEFAULTS.items():
-        settings[key] = get_ui_setting(db_path, key, default)
+        settings[key] = get_cached_setting(db_path, key, default)
 
     return settings
 
