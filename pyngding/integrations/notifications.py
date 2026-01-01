@@ -1,5 +1,6 @@
 """Notification system: webhook + HA webhook + ntfy."""
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -8,36 +9,64 @@ from collections import deque
 
 
 class NotificationQueue:
-    """Queue for notifications with rate limiting and deduplication."""
+    """Thread-safe queue for notifications with rate limiting and deduplication.
+    
+    This class is designed to be used as a singleton to preserve state across
+    multiple send_notification() calls.
+    """
 
     def __init__(self, dedup_window_seconds: int = 600):
         self.dedup_window = dedup_window_seconds
-        self.recent_events = deque()  # (event_type, ip, timestamp)
-        self.rate_limit = {}  # channel -> last_sent_time
+        self.recent_events: deque[tuple[str, str, int]] = deque()  # (event_type, ip, timestamp)
+        self.rate_limit: dict[str, int] = {}  # channel -> last_sent_time
+        self._lock = threading.Lock()
 
     def should_send(self, event_type: str, ip: str, channel: str, min_interval: int = 60) -> bool:
-        """Check if event should be sent (deduplication + rate limiting)."""
-        now = int(time.time())
+        """Check if event should be sent (deduplication + rate limiting).
+        
+        Thread-safe: uses internal lock to protect state.
+        """
+        with self._lock:
+            now = int(time.time())
 
-        # Deduplication: same event type + IP within window
-        cutoff = now - self.dedup_window
-        while self.recent_events and self.recent_events[0][2] < cutoff:
-            self.recent_events.popleft()
+            # Deduplication: same event type + IP within window
+            cutoff = now - self.dedup_window
+            while self.recent_events and self.recent_events[0][2] < cutoff:
+                self.recent_events.popleft()
 
-        for etype, eip, ets in self.recent_events:
-            if etype == event_type and eip == ip and (now - ets) < self.dedup_window:
-                return False  # Duplicate
+            for etype, eip, ets in self.recent_events:
+                if etype == event_type and eip == ip and (now - ets) < self.dedup_window:
+                    return False  # Duplicate
 
-        # Rate limiting per channel
-        last_sent = self.rate_limit.get(channel, 0)
-        if (now - last_sent) < min_interval:
-            return False
+            # Rate limiting per channel
+            last_sent = self.rate_limit.get(channel, 0)
+            if (now - last_sent) < min_interval:
+                return False
 
-        # Record event
-        self.recent_events.append((event_type, ip, now))
-        self.rate_limit[channel] = now
+            # Record event
+            self.recent_events.append((event_type, ip, now))
+            self.rate_limit[channel] = now
 
-        return True
+            return True
+
+
+# Module-level singleton instance for notification deduplication
+_notification_queue: NotificationQueue | None = None
+_queue_lock = threading.Lock()
+
+
+def get_notification_queue() -> NotificationQueue:
+    """Get the singleton NotificationQueue instance.
+    
+    Thread-safe lazy initialization.
+    """
+    global _notification_queue
+    if _notification_queue is None:
+        with _queue_lock:
+            # Double-check locking pattern
+            if _notification_queue is None:
+                _notification_queue = NotificationQueue()
+    return _notification_queue
 
 
 def send_webhook(url: str, payload: dict, secret: str | None = None, timeout: int = 3) -> bool:
@@ -134,7 +163,7 @@ def send_notification(db_path: str, event_type: str, ip: str, mac: str | None = 
     from pyngding.web.settings import DEFAULTS
 
     results = {}
-    queue = NotificationQueue()
+    queue = get_notification_queue()
 
     # Check if notifications are enabled
     notify_enabled = get_ui_setting(db_path, 'notify_enabled', DEFAULTS['notify_enabled']).lower() == 'true'
