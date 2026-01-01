@@ -1,6 +1,7 @@
 """Bottle web application."""
 import json
 import time
+from pathlib import Path
 
 from bottle import Bottle, abort, request, response, static_file, template
 
@@ -15,12 +16,38 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
     """Create and configure the Bottle application."""
     app = Bottle()
 
-    # Template settings
-    app.template_adapter = lambda template_name, **kwargs: template(
-        template_name,
-        template_lookup=['pyngding/templates'],
-        **kwargs
-    )
+    # Get absolute path to templates and static directories
+    # This works whether running from source or installed package
+    package_dir = Path(__file__).resolve().parent.parent
+    templates_dir = package_dir / 'templates'
+    static_dir = package_dir / 'static'
+
+    # Ensure paths exist
+    if not templates_dir.exists():
+        raise RuntimeError(f"Templates directory not found: {templates_dir}")
+    if not static_dir.exists():
+        raise RuntimeError(f"Static directory not found: {static_dir}")
+
+    # Convert to absolute path strings for Bottle
+    templates_path = str(templates_dir.resolve())
+    static_path = str(static_dir.resolve())
+
+    # Configure Bottle's default template lookup
+    # This sets the default lookup path for all template() calls
+    import bottle
+    # Clear any existing paths and set ours
+    bottle.TEMPLATE_PATH.clear()
+    bottle.TEMPLATE_PATH.insert(0, templates_path)
+
+    # Create a helper function that always uses our template path
+    def render_template(template_name, **kwargs):
+        """Render a template with the correct lookup path."""
+        # Make time module available to all templates
+        kwargs['time'] = time
+        return template(template_name, template_lookup=[templates_path], **kwargs)
+
+    # Store it in app for use in routes
+    app.render_template = render_template
 
     def check_auth():
         """Check if user is authenticated (if auth is enabled)."""
@@ -44,7 +71,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
     # Static files (no auth required)
     @app.route('/static/<filename:path>')
     def serve_static(filename):
-        return static_file(filename, root='pyngding/static')
+        return static_file(filename, root=static_path)
 
     # Health endpoint (no auth required - standard health check)
     @app.route('/health')
@@ -139,9 +166,9 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         }
         chart_data_json = json.dumps(chart_data)
 
-        return template('dashboard.tpl', stats=stats, chart_data_json=chart_data_json,
-                       auth_enabled=config.auth_enabled, new_hosts=new_hosts[:10],
-                       ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
+        return render_template('dashboard.tpl', stats=stats, chart_data_json=chart_data_json,
+                                auth_enabled=config.auth_enabled, new_hosts=new_hosts[:10],
+                                ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
 
     # Hosts page (auth required if enabled)
     @app.route('/hosts')
@@ -163,21 +190,30 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
                     filtered.append(host)
             all_hosts = filtered
 
-        return template('hosts.tpl', hosts=all_hosts, status_filter=status_filter, search=search, auth_enabled=config.auth_enabled)
+        return render_template('hosts.tpl', hosts=all_hosts, status_filter=status_filter, search=search, auth_enabled=config.auth_enabled)
 
     # HTMX partials (auth required if enabled)
     @app.route('/partials/summary')
     def partials_summary():
         require_auth_if_enabled()
         stats = get_scan_stats(db_path)
-        return template('partials/summary.tpl', stats=stats)
+
+        # Get IPv6 neighbor count (last hour)
+        ipv6_enabled = get_ui_setting_helper(db_path, 'ipv6_passive_enabled', 'true').lower() == 'true'
+        ipv6_count = 0
+        if ipv6_enabled:
+            from pyngding.scanning.ipv6 import get_recent_ipv6_neighbors
+            ipv6_neighbors = get_recent_ipv6_neighbors(db_path, hours=1)
+            ipv6_count = len(ipv6_neighbors)
+
+        return render_template('partials/summary.tpl', stats=stats, ipv6_enabled=ipv6_enabled, ipv6_count=ipv6_count)
 
     @app.route('/partials/recent-changes')
     def partials_recent_changes():
         require_auth_if_enabled()
         # Get recent scan runs
         recent_runs = get_recent_scan_runs(db_path, limit=10)
-        return template('partials/recent-changes.tpl', runs=recent_runs)
+        return render_template('partials/recent-changes.tpl', runs=recent_runs)
 
     @app.route('/partials/hosts-table')
     def partials_hosts_table():
@@ -197,7 +233,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
                     filtered.append(host)
             all_hosts = filtered
 
-        return template('partials/hosts-table.tpl', hosts=all_hosts)
+        return render_template('partials/hosts-table.tpl', hosts=all_hosts)
 
     @app.route('/partials/dns-host/<ip>')
     def partials_dns_host(ip):
@@ -208,10 +244,10 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
 
         adguard_enabled = get_ui_setting_helper(db_path, 'adguard_enabled', DEFAULTS['adguard_enabled']).lower() == 'true'
         if not adguard_enabled:
-            return template('partials/dns-host.tpl', enabled=False, ip=ip)
+            return render_template('partials/dns-host.tpl', enabled=False, ip=ip)
 
         summary = get_host_dns_summary(db_path, ip, limit=20)
-        return template('partials/dns-host.tpl', enabled=True, ip=ip, summary=summary)
+        return render_template('partials/dns-host.tpl', enabled=True, ip=ip, summary=summary)
 
     # Admin routes (only accessible when auth is enabled)
     @app.route('/admin/settings')
@@ -222,7 +258,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
 
         from pyngding.web.settings import get_all_settings
         settings = get_all_settings(db_path)
-        return template('admin_settings.tpl', settings=settings, auth_enabled=True)
+        return render_template('admin_settings.tpl', settings=settings, auth_enabled=True)
 
     @app.route('/admin/settings', method='POST')
     def admin_settings_update():
@@ -259,8 +295,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         if errors:
             from pyngding.web.settings import get_all_settings
             settings = get_all_settings(db_path)
-            return template('admin_settings.tpl', settings=settings, auth_enabled=True,
-                          errors=errors, updated=updated)
+            return render_template('admin_settings.tpl', settings=settings, auth_enabled=True,
+                                    errors=errors, updated=updated)
 
         # Redirect to show success
         response.status = 303
@@ -275,7 +311,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
 
         from pyngding.core.db import get_hosts_with_profiles
         hosts = get_hosts_with_profiles(db_path)
-        return template('admin_hosts.tpl', hosts=hosts, auth_enabled=True)
+        return render_template('admin_hosts.tpl', hosts=hosts, auth_enabled=True)
 
     @app.route('/admin/hosts/<host_ip>/update', method='POST')
     def admin_hosts_update(host_ip):
@@ -320,7 +356,7 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
 
         from pyngding.core.db import get_all_api_keys
         api_keys = get_all_api_keys(db_path)
-        return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, new_key=None)
+        return render_template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True, new_key=None)
 
     @app.route('/admin/api-keys', method='POST')
     def admin_api_keys_create():
@@ -336,8 +372,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         name = request.forms.get('name', '').strip()
         if not name:
             api_keys = get_all_api_keys(db_path)
-            return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True,
-                          new_key=None, error='Name is required')
+            return render_template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True,
+                                    new_key=None, error='Name is required')
 
         # Generate key
         full_key, key_prefix = generate_api_key()
@@ -348,8 +384,8 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
 
         # Show key once
         api_keys = get_all_api_keys(db_path)
-        return template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True,
-                       new_key={'name': name, 'key': full_key, 'prefix': key_prefix})
+        return render_template('admin_api_keys.tpl', api_keys=api_keys, auth_enabled=True,
+                                new_key={'name': name, 'key': full_key, 'prefix': key_prefix})
 
     @app.route('/admin/api-keys/<key_id>/toggle', method='POST')
     def admin_api_keys_toggle(key_id):
@@ -413,12 +449,12 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
                 SELECT COUNT(*) FROM dns_events WHERE ts >= ?
             """, (int(time.time()) - 3600,)).fetchone()[0]
 
-        return template('admin_adguard.tpl',
-                       adguard_enabled=adguard_enabled,
-                       state=state,
-                       total_events=total_events,
-                       recent_events=recent_events,
-                       auth_enabled=True)
+        return render_template('admin_adguard.tpl',
+                                adguard_enabled=adguard_enabled,
+                                state=state,
+                                total_events=total_events,
+                                recent_events=recent_events,
+                                auth_enabled=True)
 
     @app.route('/admin/ipv6')
     def admin_ipv6():
@@ -434,10 +470,10 @@ def create_app(config: Config, db_path: str, scheduler: ScanScheduler) -> Bottle
         # Get recent neighbors (last 24 hours)
         neighbors_24h = get_recent_ipv6_neighbors(db_path, hours=24)
 
-        return template('admin_ipv6.tpl',
-                       ipv6_enabled=ipv6_enabled,
-                       neighbors=neighbors_24h,
-                       auth_enabled=True)
+        return render_template('admin_ipv6.tpl',
+                                ipv6_enabled=ipv6_enabled,
+                                neighbors=neighbors_24h,
+                                auth_enabled=True)
 
     @app.route('/admin/<path:path>')
     def admin_404(path):
@@ -664,3 +700,35 @@ def get_ui_setting_helper(db_path: str, key: str, default: str) -> str:
     """Helper to get UI setting."""
     return db_get_ui_setting(db_path, key, default)
 
+if __name__ == '__main__':
+    """Development server - run directly for testing."""
+    from pathlib import Path
+
+    from pyngding.core.config import load_config
+    from pyngding.core.db import init_db
+
+    # Try to load config, or use defaults
+    config_path = Path('config.ini')
+    if config_path.exists():
+        config = load_config(str(config_path))
+    else:
+        # Use default config for development
+        config = Config()
+        config.bind_host = '0.0.0.0'
+        config.bind_port = 8080
+        config.db_path = 'pyngding.sqlite'
+        config.scan_targets = '192.168.1.0/24'
+        config.scan_interval_seconds = 60
+        config.auth_enabled = False
+
+    # Initialize database
+    init_db(config.db_path)
+
+    # Create scheduler
+    scheduler = ScanScheduler(config, config.db_path)
+    scheduler.start()
+
+    # Create app
+    app = create_app(config, config.db_path, scheduler)
+    print(f"Starting development server on http://{config.bind_host}:{config.bind_port}")
+    app.run(host=config.bind_host, port=config.bind_port, debug=True)
